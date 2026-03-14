@@ -7,7 +7,6 @@ from shared.networks.mlp import NormedLinear, LinearHead
 from shared.networks.gru import NormedBlockGRUCell
 from shared.networks.distributions import StraightThroughCategorical
 
-
 class RSSM(nn.Module):
     """
     DreamerV3 Recurrent State-Space Model

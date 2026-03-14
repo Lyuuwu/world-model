@@ -1,3 +1,8 @@
+# --- base ---
+from .base import (
+    Output
+)
+
 # --- mlp ---
 from .mlp import (
     get_norm, get_act,
@@ -28,11 +33,13 @@ from .sequence_model import (
 
 # --- distributions ---
 from .distributions import (
-    Distribution,
+    Dist,
+    CategoricalDist,
     StraightThroughCategorical,
     TwoHotCategorical, build_symexp_bins,
-    SymlogGaussian,
-    MSEGaussian,
-    BernoulliDist,
-    get_dist,
+)
+
+# --- losses ---
+from .losses import (
+    MSE, Huber, Agg
 )

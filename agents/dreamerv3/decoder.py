@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 import math
-from typing import Sequence
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from shared.obs_spec import ObsSpec
 from shared.math_utils import symlog
 from shared.networks.mlp import (
     MLP, NormedLinear, LinearHead, BlockLinear,
-    get_norm, get_act, trunc_normal_init_, init_linear_,
+    get_act
 )
-from shared.networks.cnn import CNNUpsampleStack, CNNDecoder, ConvTransposeBlock, SpatialNorm
-from shared.networks.distributions import (
-    Distribution, Categorical, MSEGaussian, SymlogGaussian, MSEDist, AggDist, get_dist,
-)
+from shared.networks.cnn import CNNUpsampleStack, SpatialNorm
+from shared.networks.distributions import CategoricalDist
+from shared.networks.losses import MSE, Agg
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -105,10 +102,10 @@ class VectorDecoderHead(nn.Module):
                     → reshape (B, *shape, classes) → Categorical
                     
       continuous key (symlog=True)  → LinearHead(units → prod(shape))
-                                    → SymlogGaussian      (symlog MSE loss)
+                                    → Symlog
                                     
       continuous key (symlog=False) → LinearHead(units → prod(shape))
-                                    → MSEGaussian         (vanilla MSE loss)
+                                    → MSE
     """
 
     def __init__(
@@ -146,7 +143,7 @@ class VectorDecoderHead(nn.Module):
     def forward(
         self,
         feat: torch.Tensor,    # (B, feat_dim) 或 (B, T, feat_dim)
-    ) -> dict[str, AggDist]:
+    ) -> dict[str, Agg]:
         """
         return: {key: Distribution} 
         
@@ -165,13 +162,13 @@ class VectorDecoderHead(nn.Module):
             
             if info['discrete']:
                 raw = raw.reshape(*leading, *info['shape'], info['classes'])
-                inner = Categorical(raw)
-                recons[key] = AggDist(inner, agg_dims=len(info['shape']))
+                inner = CategoricalDist(raw)
+                recons[key] = Agg(inner, agg_dims=len(info['shape']))
             else:
                 raw = raw.reshape(*leading, *info['shape'])
                 squash = symlog if self._symlog else None
-                inner = MSEDist(raw, squash)
-                recons[key] = AggDist(inner, agg_dims=len(info['shape']))
+                inner = MSE(raw, squash)
+                recons[key] = Agg(inner, agg_dims=len(info['shape']))
             
         return recons
 
@@ -255,7 +252,7 @@ class ImageDecoderHead(nn.Module):
         self,
         deter: torch.Tensor,   # (B, h_dim)
         stoch: torch.Tensor,   # (B, stoch_flat)
-    ) -> dict[str, 'AggDist']:
+    ) -> dict[str, Agg]:
         """
         return: {key: ImageMSEDist}
         
@@ -276,7 +273,7 @@ class ImageDecoderHead(nn.Module):
         
         recons = {}
         for (key, _), img in zip(self._img_channels.items(), splits):
-            recons[key] = AggDist(MSEDist(img), agg_dims=3)
+            recons[key] = Agg(MSE(img), agg_dims=3)
         
         return recons
 
@@ -378,7 +375,7 @@ class DreamerDecoder(nn.Module):
         self,
         feat: torch.Tensor | dict[str, torch.Tensor],
         bdims: int = 2,
-    ) -> dict[str, Distribution]:
+    ) -> dict[str, Agg]:
         
         if isinstance(feat, dict):
             deter = feat['deter']
