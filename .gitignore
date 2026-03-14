@@ -1,0 +1,6 @@
+baseline.txt
+file structure.txt
+.pytest_cache/
+__pycache__/
+shared.egg-info/
+tests/
