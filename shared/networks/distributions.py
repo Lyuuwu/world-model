@@ -1,4 +1,7 @@
+import math
+
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import Output
@@ -11,7 +14,7 @@ class Dist(Output):
     '''
 
     def log_prob(self, target: torch.Tensor) -> torch.Tensor:
-        ''' log likelihood (optional) '''
+        ''' log likelihood '''
         raise NotImplementedError(f'{type(self).__name__} does not implement log_prob')
     
     def loss(self, target: torch.Tensor) -> torch.Tensor:
@@ -22,7 +25,6 @@ class Dist(Output):
         return NotImplementedError(f'{type(self).__name__} does not support sampling')
     
     def entropy(self) -> torch.Tensor:
-        ''' optional (only for probability dist) '''
         raise NotImplementedError(f'{type(self).__name__} does not implement entropy')
     
     def kl(self, other: 'Dist') -> torch.Tensor:
@@ -73,7 +75,7 @@ class CategoricalDist(Dist):
 
 @register('dist', 'straight_through_categorical')
 @register('dist', 'stc')
-class StraightThroughCategorical:
+class StraightThroughCategorical(Dist):
     '''
     離散 latent state z 的 categorical distribution
 
@@ -119,16 +121,16 @@ class StraightThroughCategorical:
         return res
         
 
-    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+    def log_prob(self, event: torch.Tensor) -> torch.Tensor:
         '''
-        計算 one-hot value 的 log probability
+        計算 one-hot event 的 log probability
 
-        value: (..., num_classes) one-hot encoded
+        event: (..., num_classes) one-hot encoded
 
         return: (...) scalar log prob per sample
         '''
         log_probs = torch.log_softmax(self.dist._logits, dim=-1)
-        return (value * log_probs).sum(dim=-1)
+        return (event * log_probs).sum(dim=-1)
 
     def entropy(self, eps: float=1e-8) -> torch.Tensor:
         return self.dist.entropy(eps=eps)
@@ -150,9 +152,9 @@ def build_symexp_bins(num_bins: int = 255,
     return symexp(linear_bins)
 
 @register('dist', 'twohot')
-class TwoHotCategorical:
+class TwoHotCategorical(Dist):
     '''
-    用於 reward / value 預測的離散化分布
+    用於 reward / event 預測的離散化分布
     '''
 
     def __init__(self, logits: torch.Tensor, bins: torch.Tensor | None = None):
@@ -218,3 +220,68 @@ class TwoHotCategorical:
         target_encoded = twohot_symlog_encode(target, self.bins)
         log_probs = F.log_softmax(self._logits, dim=-1)
         return (target_encoded * log_probs).sum(dim=-1)
+
+@register('dist', 'normal')
+class NormalDist(Dist):
+    def __init__(self, mean: torch.Tensor, stddev: torch.Tensor):
+        self._mean = mean
+        self._stddev = stddev.broadcast_to(mean.shape)
+        
+        self.minent = None
+        self.maxent = None
+    
+    @property
+    def mode(self) -> torch.Tensor:
+        return self._mean
+    
+    def sample(self) -> torch.Tensor:
+        return self._mean + torch.rand_like(self._mean) * self._stddev
+    
+    def log_prob(self, event: torch.Tensor) -> torch.Tensor:
+        return (
+            -0.5 * math.log(2 * math.pi)
+            - torch.log(self._stddev)
+            - 0.5 * ((event - self._mean) / self._stddev).square()
+        )
+        
+    def entropy(self):
+        return 0.5 * torch.log(2 * math.pi * self._stddev.square()) + 0.5
+    
+    def kl(self, other: 'NormalDist') -> torch.Tensor:
+        return 0.5 * (
+            (self._stddev / other._stddev).square()
+            + ((other._mean - self._mean) / other._stddev).square()
+            + 2 * (torch.log(other._stddev) - torch.log(self._stddev))
+            - 1.0
+        )
+
+@register('dist', 'binary')
+class BinaryDist(Dist):
+    
+    def __init__(self, logit: torch.Tensor):
+        self._logit = logit
+        
+    @property
+    def mode(self) -> torch.Tensor:
+        return (self._logit > 0).float()
+    
+    def log_prob(self, event: float | torch.Tensor):
+        event = torch.as_tensor(event, dtype=self._logit.dtype, device=self._logit.device)
+        return(
+            event * F.logsigmoid(self._logit)
+            + (1.0 - event) * F.logsigmoid(-self._logit)
+        )
+    
+    def prob(self, event: float | torch.Tensor) -> torch.Tensor:
+        return torch.exp(self.log_prob(event))
+    
+    def sample(self):
+        prob = torch.sigmoid(self._logit)
+        return torch.bernoulli(prob)
+    
+    def entropy(self):
+        p = torch.sigmoid(self._logit)
+        return -(
+            p * F.logsigmoid(self._logit)
+            + (1.0 - p) * F.logsigmoid(-self._logit)
+        )

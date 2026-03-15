@@ -75,11 +75,64 @@ class ReturnNorm(nn.Module):
             self.low.mul_(self.decay).add_(low * (1 - self.decay))
             self.high.mul_(self.decay).add_(high * (1 - self.decay))
             
-    def normalize(self, returns: torch.Tensor) -> torch.Tensor:
-        scale = (self.high - self.low).clamp(min=self.eps)
-        return returns / torch.max(scale, torch.tensor(self.limit))
+    
     
     def forward(self, returns: torch.Tensor) -> torch.Tensor:
         ''' update + normalize '''
         self.update(returns)
         return self.normalize(returns)
+    
+class Normalizer(nn.Module):
+    
+    def __init__(
+        self,
+        decay: float=0.99,
+        limit: float=1e-8,
+        use_percentile: bool=False,
+        percentile_low: float=5.0,
+        percentile_high: float=95.0,
+        max_limit: float=1.0
+    ):
+        super().__init__()
+        
+        self.decay = decay
+        self.limit = limit
+        self.use_percentile = use_percentile
+        self.percentile_low = percentile_low
+        self.percentile_high = percentile_high
+        self.max_limit = max_limit
+        
+        self.register_buffer('_offset', torch.zeros(1))
+        self.register_buffer('_scale', torch.ones(1))
+        self.register_buffer('_initialized', torch.tensor(False))
+    
+    # def normalize(self, returns: torch.Tensor) -> torch.Tensor:
+    #     scale = (self.high - self.low).clamp(min=self.eps)
+    #     return returns / torch.max(scale, torch.tensor(self.limit))
+    
+    @torch.no_grad()
+    def update(self, data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        '''
+        update EMA
+        
+        return (offset, scale)
+        '''
+        
+        if self.use_percentile:
+            low = torch.quantile(data.float(), self.percentile_low / 100)
+            high = torch.quantile(data.float(), self.percentile_high / 100)
+            new_offset = torch.zeros(1, device=data.device)
+            new_scale = torch.max(high - low, torch.tensor(self.max_limit))
+        else:
+            new_offset = data.float().mean()
+            new_scale = data.float().std().clamp(min=self.limit)
+        
+        if not self._initialized:
+            self._offset.copy_(new_offset)
+            self._scale.copy_(new_scale)
+            self._initialized.fill_(True)
+        else:
+            self._offset.mul_(self.decay).add_(new_offset * (1 - self.decay))
+            self._scale.mul_(self.decay).add_(new_scale * (1 - self.decay))
+            
+        return (self._offset.clone(), self._scale.clone())
