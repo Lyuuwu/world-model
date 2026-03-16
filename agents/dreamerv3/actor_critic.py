@@ -234,7 +234,7 @@ class DreamerActorCritic(nn.Module):
             outscale=value_outscale
         )
         
-        self.slow_values = SlowValueTarget(self.value_head, slow_decay)
+        self.slow_value = SlowValueTarget(self.value_head, slow_decay)
         
         # --- normalizers ---
         
@@ -246,5 +246,135 @@ class DreamerActorCritic(nn.Module):
         
         self.valnorm = Normalizer(decay=valnorm_decay, use_percentile=False)
         self.advnorm = Normalizer(decay=advnorm_decay, use_percentile=False)
-        
     
+    def forward(self, feat: torch.Tensor) -> torch.Tensor:
+        return self.policy_head.sample(feat)
+    
+    def get_policy_fn(self) -> callable[[torch.Tensor], torch.Tensor]:
+        def policy_fn(feat: torch.Tensor) -> torch.Tensor:
+            with torch.no_grad():
+                return self.policy_head.sample(feat)
+        return policy_fn
+    
+    def compute_imag_loss(
+            self,
+            traj: ImaginedTrajectory,
+            update_norm: bool=True
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, torch.Tensor], torch.Tensor]:
+        '''
+        return (total loss, losses, metrics, ret)
+        '''
+        
+        # --- value prediction ---
+        
+        voffset, vscale = self.valnorm.stats()
+        val_dist: TwoHotCategorical = self.value_head(traj.feat)
+        slow_val_dist: TwoHotCategorical = self.slow_value(traj.feat)
+        val = val_dist.mean * vscale + voffset
+        slowval = slow_val_dist.mean * vscale + voffset
+        tarval = slowval if self.slowtar else val
+
+        # --- discount weight ---
+        
+        disc = 1.0 if self.contdisc else 1.0 - 1.0 / self.horizon
+        weight = torch.cumprod(disc * traj.cont, dim=1) / disc              # (N, H+1)
+
+        # --- lambda return ---
+        
+        ret = lambda_return(traj.reward, tarval, traj.cont, disc, self.lam) # (N, H)
+
+        # --- Advantage ---
+
+        _, rscale = self.retnorm(ret, update_norm)
+        adv = (ret - tarval[:, :-1]) / rscale
+        aoffset, ascale = self.advnorm(adv, update_norm)
+        adv_nromed = (adv - aoffset) / ascale
+
+        # --- Policy Loss ---
+
+        policy_dist = self.policy_head(traj.feat)
+        logpi = policy_dist.log_prob(traj.action.detach())[:, :-1]
+        ent = policy_dist.entropy()[:, :-1]
+
+        policy_loss = weight[:, :-1].detach() * -(
+            logpi * adv_nromed.detach() + self.actent * ent
+        )
+
+        # --- Value Loss ---
+
+        voffset, vscale = self.valnorm(ret, update_norm)
+        tar_normed = (ret - voffset) / vscale
+        tar_padded = torch.cat([tar_normed, 0 * tar_normed[:, -1:]], dim=1)
+
+        value_loss = weight[:, :-1].detach() * (
+            val_dist.loss(tar_padded.detach()) +
+            self.slowreg * val_dist.loss(slow_val_dist.mean.detach())
+        )
+
+        # --- Aggregate ---
+
+        total = policy_loss.mean() * self.policy_scale + value_loss * self.value_scale
+
+        losses = {
+            'policy': policy_loss,
+            'value':  value_loss
+        }
+
+        metrics = self._build_metrics(
+            adv, traj.reward, traj.cont,
+            ret, val, tar_normed, weight, slowval,
+            ent, rscale
+        )
+        metrics['loss/policy'] = policy_loss.mean().detach()
+        metrics['loss/value']  = value_loss.mean().detach()
+        metrics['loss/total']  = total.detach()
+
+        return total, losses, metrics, ret
+    
+    def compute_repl_loss(
+            slef,
+            replay_feat: torch.Tensor,
+            is_last: torch.Tensor,
+            is_terminal: torch.Tensor,
+            reward: torch.Tensor,
+            bootstrap: torch.Tensor,
+            K: int,
+            update_norms: bool=True
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+        
+        last_K = replay_feat[-K:]
+        raise NotImplementedError
+
+    def update_slow_target(self) -> None:
+        self.slow_value.update(self.value_head)
+
+    def _build_metrics(
+            self,
+            adv: torch.Tensor,
+            rew: torch.Tensor,
+            con: torch.Tensor,
+            ret: torch.Tensor,
+            val: torch.Tensor,
+            tar_normed: torch.Tensor,
+            weight: torch.Tensor,
+            slowval: torch.Tensor,
+            entropy: torch.Tensor,
+            rscale: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        return {
+            'imag/adv':       adv.mean().detach(),
+            'imag/adv_std':   adv.std().detach(),
+            'imag/adv_mag':   adv.abs().mean().detach(),
+            'imag/rew':       rew.mean().detach(),
+            'imag/con':       con.mean().detach(),
+            'imag/ret':       ret.mean().detach(),
+            'imag/val':       val.mean().detach(),
+            'imag/tar':       tar_normed.mean().detach(),
+            'imag/weight':    weight.mean().detach(),
+            'imag/slowval':   slowval.mean().detach(),
+            'imag/ret_min':   ret.min().detach(),
+            'imag/ret_max':   ret.max().detach(),
+            'imag/ret_rate':  (ret.abs() >= 1.0).float().mean().detach(),
+            'imag/entropy':   entropy.mean().detach(),
+            'imag/rscale':    rscale.detach(),
+        }

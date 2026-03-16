@@ -58,8 +58,8 @@ class CategoricalDist(Dist):
     def sample(self) -> torch.Tensor:
         return torch.distributions.Categorical(logits=self._logits).sample()
     
-    def log_prob(self, event: torch.Tensor) -> torch.Tensor:
-        onehot = F.one_hot(event.long(), self._num_classes)
+    def log_prob(self, event: torch.Tensor | int) -> torch.Tensor:
+        onehot = F.one_hot(event, self._num_classes)
         return (torch.log_softmax(self._logits, dim=-1) * onehot).sum(-1)
     
     def entropy(self, eps: float=1e-8):

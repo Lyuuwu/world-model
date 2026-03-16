@@ -106,10 +106,6 @@ class Normalizer(nn.Module):
         self.register_buffer('_scale', torch.ones(1))
         self.register_buffer('_initialized', torch.tensor(False))
     
-    # def normalize(self, returns: torch.Tensor) -> torch.Tensor:
-    #     scale = (self.high - self.low).clamp(min=self.eps)
-    #     return returns / torch.max(scale, torch.tensor(self.limit))
-    
     @torch.no_grad()
     def update(self, data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         '''
@@ -136,3 +132,17 @@ class Normalizer(nn.Module):
             self._scale.mul_(self.decay).add_(new_scale * (1 - self.decay))
             
         return (self._offset.clone(), self._scale.clone())
+    
+    def stats(self) -> tuple[torch.Tensor, torch.Tensor]:
+        return (self._offset.clone(), self._scale.clone())
+    
+    def normalize(self, data: torch.Tensor) -> torch.Tensor:
+        return (data - self._offset) / self._scale
+    
+    def denormalize(self, data: torch.Tensor) -> torch.Tensor:
+        return data * self._scale + self._offset
+    
+    def forward(self, data: torch.Tensor, update: bool=True) -> tuple[torch.Tensor, torch.Tensor]:
+        if update:
+            return self.update(data)
+        return self.stats()
