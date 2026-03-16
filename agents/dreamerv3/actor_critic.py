@@ -332,7 +332,7 @@ class DreamerActorCritic(nn.Module):
         return total, losses, metrics, ret
     
     def compute_repl_loss(
-            slef,
+            self,
             replay_feat: torch.Tensor,
             is_last: torch.Tensor,
             is_terminal: torch.Tensor,
@@ -342,8 +342,27 @@ class DreamerActorCritic(nn.Module):
             update_norms: bool=True
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         
-        last_K = replay_feat[-K:]
-        raise NotImplementedError
+        feat = replay_feat[:, -K:]
+        last = is_last[:, -K:]
+        term = is_terminal[:, -K:]
+        rew = reward[:, -K:]
+        boot = bootstrap
+        
+        voffset, vscale = self.valnorm.stats()
+        val_dist = self.value_head(feat)
+        slow_val_dist = self.slow_value(feat)
+        val = val_dist.mean * vscale + voffset
+        slowval = slow_val_dist.mean * vscale + voffset
+        tarval = slowval if self.slowtar else val
+
+        disc = 1.0 - 1.0 / self.horizon
+
+        weight = (~last).float()
+
+        ret = lambda_return_replay(last, term, rew, tarval, boot, disc, self.lam)   # (B, K-1)
+        ret = torch.cat([ret, 0 * ret[:, -1:]], dim=-1) # (B, K)
+
+        voffset, vscale = self.valnorm(ret, )
 
     def update_slow_target(self) -> None:
         self.slow_value.update(self.value_head)
