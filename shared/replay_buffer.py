@@ -8,7 +8,7 @@ class Episode:
         self._steps: list[dict[str, np.ndarray]] = []
         self._finalized: Optional[dict[str, np.ndarray]] = False
         
-    def add(self, obs: dict, action: np.ndarray, reward: float, is_first: bool, is_terminal: bool):
+    def add(self, obs: dict, action: np.ndarray, reward: float, is_first: bool, is_last: bool, is_terminal: bool):
         assert not self._finalized, 'Cannot add to finalized episode'
         
         step = {}
@@ -18,6 +18,7 @@ class Episode:
         step['action'] = np.asarray(action, dtype=np.float32)
         step['reward'] = np.float32(reward)
         step['is_first'] = np.bool_(is_first)
+        step['is_last'] = np.bool_(is_last)
         step['is_terminal'] = np.bool_(is_terminal)
         self._steps.append(step)
         
@@ -63,7 +64,8 @@ class EpisodeReplayBuffer:
         action: np.ndarray,
         reward: float,
         done: bool,
-        is_first: bool
+        is_first: bool,
+        is_last: bool
     ):
         if is_first:
             if self._ongoing is not None and len(self._ongoing) > 0:
@@ -71,7 +73,7 @@ class EpisodeReplayBuffer:
             self._ongoing = Episode()
         
         assert self._ongoing is not None, 'Must call add_step with is_first=True first'
-        self._ongoing.add(obs, action, reward, is_first=is_first, is_terminal=done)
+        self._ongoing.add(obs, action, reward, is_first=is_first, is_last=is_last, is_terminal=done)
         
         if done:
             self._commit_ongoing()
