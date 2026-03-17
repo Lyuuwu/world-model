@@ -19,16 +19,16 @@ class Dist(Output):
     
     def loss(self, target: torch.Tensor) -> torch.Tensor:
         ''' pre-element loss (default -log_prob(target.detach())) '''
-        return -self.log_prob(target.detach())
+        raise -self.log_prob(target.detach())
     
     def sample(self) -> torch.Tensor:
-        return NotImplementedError(f'{type(self).__name__} does not support sampling')
+        raise NotImplementedError(f'{type(self).__name__} does not support sampling')
     
     def entropy(self) -> torch.Tensor:
         raise NotImplementedError(f'{type(self).__name__} does not implement entropy')
     
     def kl(self, other: 'Dist') -> torch.Tensor:
-        return NotImplementedError(f'{type(self).__name__} does not implement kl')
+        raise NotImplementedError(f'{type(self).__name__} does not implement kl')
 
 @register('dist', 'categorical')
 @register('dist', 'cat')
@@ -39,17 +39,15 @@ class CategoricalDist(Dist):
     回傳 interger index
     '''
     
-    def __init__(self, logits: torch.Tensor, unimix_ratio: float=0.0):
+    def __init__(self, logits: torch.Tensor, unimix: float=0.0):
         self._logits = logits
         self._num_classes = logits.shape[-1]
         
-        if unimix_ratio > 0:
+        if unimix > 0:
             raw_probs = F.softmax(logits, dim=-1)
-            uniform = 1.0 / self._num_classes
-            probs = (1 - unimix_ratio) * raw_probs + unimix_ratio * uniform
+            uniform = torch.ones_like(raw_probs) / self._num_classes
+            probs = (1 - unimix) * raw_probs + unimix * uniform
             self._logits = torch.log(probs)
-        
-        self._probs = F.softmax(self._logits, dim=-1)
         
     @property
     def mode(self) -> torch.Tensor:
@@ -62,9 +60,10 @@ class CategoricalDist(Dist):
         onehot = F.one_hot(event, self._num_classes)
         return (torch.log_softmax(self._logits, dim=-1) * onehot).sum(-1)
     
-    def entropy(self, eps: float=1e-8):
-        logprob = torch.log(self._probs + eps)
-        return -(self._probs * logprob).sum(-1)
+    def entropy(self):
+        logprob = torch.log_softmax(self._logits)
+        prob = torch.softmax(self._logits, -1)
+        return -(prob * logprob).sum(-1)
     
     def kl(self, other: 'CategoricalDist'):
         logprob = torch.log_softmax(self._logits, -1)

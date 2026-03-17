@@ -95,17 +95,6 @@ class ImageSpatialProjection(nn.Module):
 class VectorDecoderHead(nn.Module):
     """
     feat → shared MLP body → per-key LinearHead → Distribution
-    
-    每個 obs key 根據其 ObsSpec 選擇不同的 output distribution:
-    
-      discrete key  → LinearHead(units → prod(shape) * classes)
-                    → reshape (B, *shape, classes) → Categorical
-                    
-      continuous key (symlog=True)  → LinearHead(units → prod(shape))
-                                    → Symlog
-                                    
-      continuous key (symlog=False) → LinearHead(units → prod(shape))
-                                    → MSE
     """
 
     def __init__(
@@ -125,7 +114,7 @@ class VectorDecoderHead(nn.Module):
         self.mlp = MLP(feat_dim, units, layers, norm, act)
         
         self.heads = nn.ModuleDict()
-        self._key_info = {}
+        self.key_info = {}
         
         for key, spec in obs_space.items():
             if spec.discrete:
@@ -134,43 +123,15 @@ class VectorDecoderHead(nn.Module):
                 out_dim = math.prod(spec.shape)
             
             self.heads[key] = LinearHead(units, out_dim, outscale)
-            self._key_info[key] = {
+            self.key_info[key] = {
                 'discrete': spec.discrete,
                 'shape': spec.shape,
                 'classes': spec.classes
             }
 
-    def forward(
-        self,
-        feat: torch.Tensor,    # (B, feat_dim) 或 (B, T, feat_dim)
-    ) -> dict[str, Agg]:
-        """
-        return: {key: Distribution} 
-        
-        每個 Distribution 物件支援:
-          - .loss(target)  → (B,) 或 (B,T)  scalar loss per sample
-          - .mode          → 重建值 (eval 時用)
-        """
-        
-        leading = feat.shape[:-1]
-        hidden = self.mlp(feat)
-        
-        recons = {}
-        for key, head in self.heads.items():
-            info = self._key_info[key]
-            raw = head(hidden)
-            
-            if info['discrete']:
-                raw = raw.reshape(*leading, *info['shape'], info['classes'])
-                inner = CategoricalDist(raw)
-                recons[key] = Agg(inner, agg_dims=len(info['shape']))
-            else:
-                raw = raw.reshape(*leading, *info['shape'])
-                squash = symlog if self._symlog else None
-                inner = MSE(raw, squash)
-                recons[key] = Agg(inner, agg_dims=len(info['shape']))
-            
-        return recons
+    def forward(self, feat: torch.Tensor) -> dict[str, torch.Tensor]:    
+        hidden = self.mlp(feat)    
+        return {key: head(hidden) for key, head in self.heads.items()}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -180,26 +141,6 @@ class VectorDecoderHead(nn.Module):
 class ImageDecoderHead(nn.Module):
     """
     feat → ImageSpatialProjection → CNN upsample → sigmoid → MSE per pixel
-    
-    CNN upsampling 結構（與 Encoder 鏡像對稱）:
-    
-      (B, depths[-1], H_min, W_min)
-        → ConvTransposeBlock(depths[-1] → depths[-2])  + upsample ×2
-        → ConvTransposeBlock(depths[-2] → depths[-3])  + upsample ×2
-        → ...
-        → ConvTransposeBlock(depths[1] → depths[0])    + upsample ×2
-        → final upsample ×2 + Conv2d(depths[0] → out_channels) + sigmoid
-    
-    Output: (B, C_out, H, W) ∈ [0, 1]
-    
-    ⚠️ 注意原作在 loss 計算時：
-       - target image 要從 uint8 [0,255] 轉成 float [0,1]
-       - loss = MSE(pred, target)，然後 SUM over (C, H, W)（不是 mean！）
-       - 這個 sum-over-spatial 的行為透過 Agg(MSE, dims=3) 實現
-       - 我們在 Distribution wrapper 裡處理
-       
-    ⚠️ 如果有多個 image keys (e.g., rgb + depth)，channel concat 後一起 decode
-       最後 split 回各自的 channel 數
     """
 
     def __init__(
@@ -211,8 +152,8 @@ class ImageDecoderHead(nn.Module):
         depth: int = 64,
         mults: tuple[int, ...] = (2, 3, 4, 4),
         kernel: int = 5,
-        upsample: str = 'upsample',     # 'upsample' (nearest+conv) | 'stride' (transposed conv)
-        units: int = 1024,               # stoch projection hidden dim
+        upsample: str = 'upsample',
+        units: int = 1024,
         bspace: int = 8,
         norm: str = 'rms',
         act: str = 'silu',
@@ -252,16 +193,9 @@ class ImageDecoderHead(nn.Module):
         self,
         deter: torch.Tensor,   # (B, h_dim)
         stoch: torch.Tensor,   # (B, stoch_flat)
-    ) -> dict[str, Agg]:
+    ) -> dict[str, torch.Tensor]:
         """
         return: {key: ImageMSEDist}
-        
-        ImageMSEDist 包裝:
-          - .pred()        → (B, C, H, W) ∈ [0, 1]
-          - .loss(target)  → (B,) 其中 target 已是 float [0,1]
-                             loss = sum over (C, H, W) of (pred - target)²
-        
-        ⚠️ target 的 uint8→float 轉換在 world_model.py 做，不在 decoder 裡
         """
         
         x = self.spatial_proj(deter, stoch)
@@ -271,11 +205,7 @@ class ImageDecoderHead(nn.Module):
         ch_list = list(self._img_channels.values())
         splits = torch.split(x, ch_list, dim=1)
         
-        recons = {}
-        for (key, _), img in zip(self._img_channels.items(), splits):
-            recons[key] = Agg(MSE(img), agg_dims=3)
-        
-        return recons
+        return {key: img for (key, _), img in zip(self._img_channels.items(), splits)}
 
 # ═══════════════════════════════════════════════════════════════
 #  DreamerDecoder: 組裝 Image + Vector paths
@@ -283,40 +213,7 @@ class ImageDecoderHead(nn.Module):
 
 class DreamerDecoder(nn.Module):
     """
-    DreamerV3 的完整 Decoder
-    
-    組裝邏輯:
-      1. 從 RSSM feat dict 取出 deter 和 stoch
-      2. 如果有 image keys → ImageDecoderHead
-      3. 如果有 vector keys → VectorDecoderHead
-      4. 合併 recons dict 回傳
-    
-    ════════════════════════════════════════════
-    呼叫流程 (world_model.py 中)
-    ════════════════════════════════════════════
-    
-      # 1. RSSM observe → feat dict
-      state, outputs = rssm.observe(tokens, actions, resets)
-      feat = rssm.get_feat(state)          # (B, T, feat_dim)
-      
-      # 2. Decoder → per-key distributions
-      recons = decoder(feat)               # dict[str, Distribution]
-      
-      # 3. Prediction loss
-      for key, dist in recons.items():
-          target = preprocess(obs[key])     # image: uint8→float/255, vec: as-is
-          losses[key] = dist.loss(target)   # (B, T) per-sample loss
-    
-    ════════════════════════════════════════════
-    config 驅動：與其他 agent 的可替換性
-    ════════════════════════════════════════════
-    
-    未來 R2I / EDELINE 可以：
-      - 直接複用 VectorDecoderHead（它們的 vector 重建邏輯一樣）
-      - 替換 ImageDecoderHead（DIAMOND 用 diffusion decoder）
-      - 或整個替換 DreamerDecoder（IRIS 根本沒有 pixel-level decoder）
-    
-    因此這個 class 應該註冊到 Registry 方便 config 切換
+    Decoder of Dreamerv3
     """
 
     def __init__(
@@ -351,7 +248,7 @@ class DreamerDecoder(nn.Module):
     ):
         super().__init__()
 
-        # ── 分離 obs keys ──
+        # --- 分離 obs keys ---
         self.img_keys = sorted([k for k, s in obs_space.items() if s.is_image])
         self.vec_keys = sorted([k for k, s in obs_space.items() if not s.is_image])
         self.obs_space = obs_space
@@ -395,11 +292,28 @@ class DreamerDecoder(nn.Module):
         recons = {}
         
         if self.img_keys:
-            recons.update(self.img_decoder(deter_2d, stoch_2d))
+            raw_imgs = self.img_decoder(deter_2d, stoch_2d)
+            
+            # raw_imgs: {key: (B_flat, C_k, H, W)}
+            for key, img in raw_imgs.items():
+                img = img.reshape(*bshape, *img.shape[1:])  # (B, T, C, H, W)
+                recons[key] = Agg(MSE(img), agg_dims=3)     # (C, H, W)
         
         if self.vec_keys:
-            recons.update(self.vec_decoder(feat_2d))
+            raw_vecs = self.vec_decoder(feat_2d)
             
+            # raw_vecs: {key: (B_flat, out_dim)}
+            for key, raw in raw_vecs.items():
+                info = self.vec_decoder.key_info[key]
+                
+                if info['discrete']:
+                    raw = raw.reshape(*bshape, *info['shape'], info['classes'])
+                    recons[key] = Agg(CategoricalDist(raw), agg_dims=len(info['shape']))
+                else:
+                    raw = raw.reshape(*bshape, *info['shape'])
+                    squash = symlog if self.vec_decoder._symlog else None
+                    recons[key] = Agg(MSE(raw, squash), agg_dims=len(info['shape']))
+                                
         return recons
 
 # ═══════════════════════════════════════════════════════════════

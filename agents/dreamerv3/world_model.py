@@ -180,7 +180,7 @@ class DreamerWorldModel(nn.Module):
             bins=reward_bins,
             norm=norm,
             act=act,
-            outscale=outscale
+            outscale=0.0
         )
         
         self.continue_head = ContinueHead(
@@ -189,7 +189,7 @@ class DreamerWorldModel(nn.Module):
             layers=head_layers,
             norm=norm,
             act=act,
-            outscale=outscale
+            outscale=0.0
         )
         
         # --- TEMP ---

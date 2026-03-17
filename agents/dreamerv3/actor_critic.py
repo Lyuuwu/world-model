@@ -258,12 +258,12 @@ class DreamerActorCritic(nn.Module):
         self.advnorm = Normalizer(decay=advnorm_decay, use_percentile=False)
     
     def forward(self, feat: torch.Tensor) -> torch.Tensor:
-        return self.policy_head.sample(feat)
+        return self.policy_head(feat).sample()
     
     def get_policy_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
         def policy_fn(feat: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
-                return self.policy_head.sample(feat)
+                return self.policy_head(feat).sample()
         return policy_fn
     
     def compute_imag_loss(
