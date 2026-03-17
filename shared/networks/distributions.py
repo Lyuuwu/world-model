@@ -19,7 +19,7 @@ class Dist(Output):
     
     def loss(self, target: torch.Tensor) -> torch.Tensor:
         ''' pre-element loss (default -log_prob(target.detach())) '''
-        raise -self.log_prob(target.detach())
+        return -self.log_prob(target.detach())
     
     def sample(self) -> torch.Tensor:
         raise NotImplementedError(f'{type(self).__name__} does not support sampling')
