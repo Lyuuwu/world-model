@@ -373,7 +373,8 @@ class DreamerWorldModel(nn.Module):
         return ImaginedTrajectory(
             feat=full_feat,
             reward=reward,
-            cont=cont
+            cont=cont,
+            action=full_action
         )
         
     
@@ -393,7 +394,7 @@ class DreamerWorldModel(nn.Module):
             val = rssm_outputs[key][:, -K:]
             states[key] = val.reshape(B*K, *val.shape[2:])
         
-        feat = self.rssm.get_feat(states).squeeze(1)   # (B*K, feat_dim) -> (B*K, 1, feat_dim)
+        feat = self.rssm.get_feat(states).unsqueeze(1)   # (B*K, feat_dim) -> (B*K, 1, feat_dim)
         
         return states, feat
     

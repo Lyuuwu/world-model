@@ -235,7 +235,7 @@ class NormalDist(Dist):
         return self._mean
     
     def sample(self) -> torch.Tensor:
-        return self._mean + torch.rand_like(self._mean) * self._stddev
+        return self._mean + torch.randn_like(self._mean) * self._stddev
     
     def log_prob(self, event: torch.Tensor) -> torch.Tensor:
         return (

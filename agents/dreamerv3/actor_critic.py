@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,7 +35,7 @@ class PolicyHead(nn.Module):
         act: str='silu',
         outscale: float=1.0,
         unimix: float=0.01,
-        minstd: float=1.0,
+        minstd: float=0.1,
         maxstd: float=1.0
     ):
         super().__init__()
@@ -136,26 +138,26 @@ class SlowValueTarget(nn.Module):
     def forward(self, feat: torch.Tensor) -> TwoHotCategorical:
         return self.target(feat)
     
-def lambda_return(
-    rew: torch.Tensor,
-    val: torch.Tensor,
-    cont: torch.Tensor,
-    disc: float,
-    lam: float=0.95
-) -> torch.Tensor:
-    bootstrap = val[:, -1]
-    live = cont[:, 1:] * disc
-    lam_w = lam
-    interm = rew[:, 1:] + (1 - lam_w) * live * val[:, 1:]
+# def lambda_return(
+#     rew: torch.Tensor,
+#     val: torch.Tensor,
+#     cont: torch.Tensor,
+#     disc: float,
+#     lam: float=0.95
+# ) -> torch.Tensor:
+#     bootstrap = val[:, -1]
+#     live = cont[:, 1:] * disc
+#     lam_w = lam
+#     interm = rew[:, 1:] + (1 - lam_w) * live * val[:, 1:]
     
-    rets = [bootstrap]
-    for t in reversed(range(live.shape[1])):
-        rets.append(interm[:, t] + live[:, t] * lam_w * rets[-1])
+#     rets = [bootstrap]
+#     for t in reversed(range(live.shape[1])):
+#         rets.append(interm[:, t] + live[:, t] * lam_w * rets[-1])
         
-    rets = list(reversed(rets))[:-1]
-    return torch.stack(rets, dim=1)
+#     rets = list(reversed(rets))[:-1]
+#     return torch.stack(rets, dim=1)
 
-def lambda_return_replay(
+def lambda_return(
     last: torch.Tensor,
     term: torch.Tensor,
     rew: torch.Tensor,
@@ -164,8 +166,14 @@ def lambda_return_replay(
     disc: float,
     lam: float=0.95
 ) -> torch.Tensor:
-    raise NotImplementedError
-
+    rets = [boot[:, -1]]
+    live = (1 - term.float())[:, 1:] * disc
+    cont = (1 - last.float())[:, 1:] * lam
+    interm = rew[:, 1:] + (1 - cont) * live * boot[:, 1:]
+    for t in reversed(range(live.shape[1])):
+        rets.append(interm[:, t] + live[:, t] * cont[:, t] * rets[-1])
+    
+    return torch.stack(list(reversed(rets))[:-1], dim=1)
 class DreamerActorCritic(nn.Module):
     def __init__(
         self,
@@ -183,6 +191,9 @@ class DreamerActorCritic(nn.Module):
         # --- policy ---
         policy_unimix: float=0.01,
         actent: float=3e-4,
+        
+        minstd: float=0.1,
+        maxstd: float=1.0,
         
         # --- value ---
         value_outscale: float=0.0,
@@ -226,7 +237,7 @@ class DreamerActorCritic(nn.Module):
         self.policy_head = PolicyHead(
             feat_dim, action_dim, discrete,
             units, layers, norm, act,
-            unimix=policy_unimix
+            unimix=policy_unimix, minstd=minstd, maxstd=maxstd
         )
         
         self.value_head = ValueHead(
@@ -250,7 +261,7 @@ class DreamerActorCritic(nn.Module):
     def forward(self, feat: torch.Tensor) -> torch.Tensor:
         return self.policy_head.sample(feat)
     
-    def get_policy_fn(self) -> callable[[torch.Tensor], torch.Tensor]:
+    def get_policy_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
         def policy_fn(feat: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
                 return self.policy_head.sample(feat)
@@ -281,14 +292,16 @@ class DreamerActorCritic(nn.Module):
 
         # --- lambda return ---
         
-        ret = lambda_return(traj.reward, tarval, traj.cont, disc, self.lam) # (N, H)
+        last = torch.zeros_like(traj.cont)
+        term = 1 - traj.cont
+        ret = lambda_return(last, term, traj.reward, tarval, traj.cont, disc, self.lam) # (N, H)
 
         # --- Advantage ---
 
-        _, rscale = self.retnorm(ret, update_norm)
+        roffset, rscale = self.retnorm(ret, update_norm)
         adv = (ret - tarval[:, :-1]) / rscale
         aoffset, ascale = self.advnorm(adv, update_norm)
-        adv_nromed = (adv - aoffset) / ascale
+        adv_normed = (adv - aoffset) / ascale
 
         # --- Policy Loss ---
 
@@ -297,7 +310,7 @@ class DreamerActorCritic(nn.Module):
         ent = policy_dist.entropy()[:, :-1]
 
         policy_loss = weight[:, :-1].detach() * -(
-            logpi * adv_nromed.detach() + self.actent * ent
+            logpi * adv_normed.detach() + self.actent * ent
         )
 
         # --- Value Loss ---
@@ -309,11 +322,11 @@ class DreamerActorCritic(nn.Module):
         value_loss = weight[:, :-1].detach() * (
             val_dist.loss(tar_padded.detach()) +
             self.slowreg * val_dist.loss(slow_val_dist.mean.detach())
-        )
+        )[:, :-1]
 
         # --- Aggregate ---
 
-        total = policy_loss.mean() * self.policy_scale + value_loss * self.value_scale
+        total = policy_loss.mean() * self.policy_scale + value_loss.mean() * self.value_scale
 
         losses = {
             'policy': policy_loss,
@@ -323,7 +336,7 @@ class DreamerActorCritic(nn.Module):
         metrics = self._build_metrics(
             adv, traj.reward, traj.cont,
             ret, val, tar_normed, weight, slowval,
-            ent, rscale
+            ent, roffset, rscale
         )
         metrics['loss/policy'] = policy_loss.mean().detach()
         metrics['loss/value']  = value_loss.mean().detach()
@@ -359,10 +372,18 @@ class DreamerActorCritic(nn.Module):
 
         weight = (~last).float()
 
-        ret = lambda_return_replay(last, term, rew, tarval, boot, disc, self.lam)   # (B, K-1)
-        ret = torch.cat([ret, 0 * ret[:, -1:]], dim=-1) # (B, K)
+        ret = lambda_return(last, term, rew, tarval, boot, disc, self.lam)   # (B, K-1)
 
-        voffset, vscale = self.valnorm(ret, )
+        voffset, vscale = self.valnorm(ret, update=update_norms)
+        ret_normed = (ret - voffset) / vscale
+        ret_padded = torch.cat([ret_normed, 0 * ret_normed[:, -1:]], dim=1)         # (B, K)
+        
+        repval_loss = weight[:, :-1] * (
+            val_dist.loss(ret_padded.detach()) +
+            self.slowreg * val_dist.loss(slow_val_dist.mean.detach())
+        )[:, :-1]
+        
+        return {'repval': repval_loss}, {}
 
     def update_slow_target(self) -> None:
         self.slow_value.update(self.value_head)
@@ -378,8 +399,12 @@ class DreamerActorCritic(nn.Module):
             weight: torch.Tensor,
             slowval: torch.Tensor,
             entropy: torch.Tensor,
+            roffset: torch.Tensor,
             rscale: torch.Tensor
     ) -> dict[str, torch.Tensor]:
+        
+        ret_normed = (ret - roffset) / rscale
+        
         return {
             'imag/adv':       adv.mean().detach(),
             'imag/adv_std':   adv.std().detach(),
@@ -391,9 +416,9 @@ class DreamerActorCritic(nn.Module):
             'imag/tar':       tar_normed.mean().detach(),
             'imag/weight':    weight.mean().detach(),
             'imag/slowval':   slowval.mean().detach(),
-            'imag/ret_min':   ret.min().detach(),
-            'imag/ret_max':   ret.max().detach(),
-            'imag/ret_rate':  (ret.abs() >= 1.0).float().mean().detach(),
+            'imag/ret_min':   ret_normed.min().detach(),
+            'imag/ret_max':   ret_normed.max().detach(),
+            'imag/ret_rate':  (ret_normed.abs() >= 1.0).float().mean().detach(),
             'imag/entropy':   entropy.mean().detach(),
             'imag/rscale':    rscale.detach(),
         }
