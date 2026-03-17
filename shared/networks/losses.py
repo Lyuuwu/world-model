@@ -51,6 +51,17 @@ class Agg(Output):
         self._inner = inner
         self._dims = list(range(-agg_dims, 0))
         self._agg_fn = agg_fn
+        
+    def __getattr__(self, name: str):
+        if name.startswith('_'):
+            raise AttributeError
+        try:
+            return getattr(self._inner, name)
+        except:
+            raise AttributeError(
+                f'"{type(self).__name__}" wrapping "{type(self._inner).__name__}"'
+                f'has no attribute {name}'
+            )
     
     @property
     def mode(self) -> torch.Tensor:

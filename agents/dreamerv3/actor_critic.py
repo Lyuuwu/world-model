@@ -87,7 +87,6 @@ class PolicyHead(nn.Module):
             
             return Agg(dist, agg_dims=1)
             
-    
     def sample(self, feat: torch.Tensor) -> torch.Tensor:        
         dist = self.forward(feat)    
         return dist.sample()
@@ -294,7 +293,13 @@ class DreamerActorCritic(nn.Module):
         
         last = torch.zeros_like(traj.cont)
         term = 1 - traj.cont
-        ret = lambda_return(last, term, traj.reward, tarval, traj.cont, disc, self.lam) # (N, H)
+        ret = lambda_return(last=last,
+                            term=term,
+                            rew=traj.reward,
+                            val=tarval,
+                            boot=tarval,
+                            disc=disc,
+                            lam=self.lam) # (N, H)
 
         # --- Advantage ---
 
@@ -336,7 +341,7 @@ class DreamerActorCritic(nn.Module):
         metrics = self._build_metrics(
             adv, traj.reward, traj.cont,
             ret, val, tar_normed, weight, slowval,
-            ent, roffset, rscale
+            policy_dist, ent, roffset, rscale
         )
         metrics['loss/policy'] = policy_loss.mean().detach()
         metrics['loss/value']  = value_loss.mean().detach()
@@ -398,6 +403,7 @@ class DreamerActorCritic(nn.Module):
             tar_normed: torch.Tensor,
             weight: torch.Tensor,
             slowval: torch.Tensor,
+            policy_dist: Agg,
             entropy: torch.Tensor,
             roffset: torch.Tensor,
             rscale: torch.Tensor
@@ -405,13 +411,13 @@ class DreamerActorCritic(nn.Module):
         
         ret_normed = (ret - roffset) / rscale
         
-        return {
+        metrics = {
             'imag/adv':       adv.mean().detach(),
             'imag/adv_std':   adv.std().detach(),
             'imag/adv_mag':   adv.abs().mean().detach(),
             'imag/rew':       rew.mean().detach(),
             'imag/con':       con.mean().detach(),
-            'imag/ret':       ret.mean().detach(),
+            'imag/ret':       ret_normed.mean().detach(),
             'imag/val':       val.mean().detach(),
             'imag/tar':       tar_normed.mean().detach(),
             'imag/weight':    weight.mean().detach(),
@@ -422,3 +428,10 @@ class DreamerActorCritic(nn.Module):
             'imag/entropy':   entropy.mean().detach(),
             'imag/rscale':    rscale.detach(),
         }
+
+        if hasattr(policy_dist, 'minent'):
+            lo = policy_dist.minent
+            hi = policy_dist.maxent
+            metrics['imag/rand'] = ((entropy.mean() - lo) / (hi - lo)).detach()
+            
+        return metrics
