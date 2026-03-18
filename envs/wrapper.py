@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Literal
+from typing import Literal, Any
 
 import gymnasium as gym
 import numpy as np
@@ -31,7 +31,7 @@ class MaxNoopWrapper(gym.Wrapper):
     '''
     
     def __init__(self, env: gym.Env, max_noop: int=30, noop_action: int=0):
-        super.__init__(env)
+        super().__init__(env)
         assert max_noop >= 0, f'max_noop cannot be negative: max_noop={max_noop}'
         self._max_noop = max_noop
         self._noop_action = noop_action
@@ -143,7 +143,7 @@ class MaxAndSkipWrapper(gym.Wrapper):
         self._obs_buffer = []
         sum = 0.0
 
-        for _ in self._repeat:
+        for _ in range(self._repeat):
             obs, rew, term, trun, info = self.env.step(action)
             sum += rew
             self._obs_buffer.append(obs)
@@ -214,7 +214,7 @@ class ResizeWrapper(gym.ObservationWrapper):
     
     def observation(self, obs: np.ndarray) -> np.ndarray:
         resized = cv2.resize(obs, self._size[::-1], interpolation=cv2.INTER_AREA)
-        if obs.shape == 3:
+        if obs.ndim == 3:
             resized = resized[..., np.newaxis]
         return resized.astype(np.uint8)
     
@@ -247,7 +247,7 @@ class FrameStackWrapper(gym.Wrapper):
         return self._get_obs(), rew, term, trun, info
     
     def _get_obs(self) -> np.ndarray:
-        return np.concat(list(self._frames), axis=-1)  # (H, W, C * N)
+        return np.concatenate(list(self._frames), axis=-1)  # (H, W, C * N)
 
 class RewardClipWrapper(gym.Wrapper):
     ''' Clip reward '''
@@ -271,3 +271,176 @@ class RewardClipWrapper(gym.Wrapper):
             raise ValueError(f'there is no mode name = {self._mode}')
         
         return obs, rew, term, trun, info
+
+class DictObsWrapper(gym.Wrapper):
+    ''' 把 gym 的 np.ndarray obs 轉成 dict '''
+    
+    def __init__(self, env: gym.Env, obs_key: str='image'):
+        super().__init__(env)
+        self._obs_key = obs_key
+        self._is_first: bool = True
+        
+    def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[dict, dict]:
+        obs, info = self.env.reset(seed=seed, options=options)
+        self._is_first = True
+        
+        dict_oct = {
+            self._obs_key: obs,
+            'reward': np.float32(0.0),
+            'is_first': np.bool_(True),
+            'is_last': np.bool_(True),
+            'is_terminal': np.bool_(False)
+        }
+        
+        return (dict_oct, info)
+    
+    def step(self, action: int):
+        obs, rew, term, trun, info = self.env.step(action)
+        is_last = term or trun
+        is_term = term
+        
+        dict_obs = {
+            self._obs_key: obs,
+            'reward': rew,
+            'is_first': np.bool_(self._is_first),
+            'is_last': np.bool_(is_last),
+            'is_terminal': np.bool_(is_term)
+        }
+        
+        self._is_first = False
+        
+        return dict_obs, rew, term, trun, info
+    
+class TimeLimitWrapper(gym.Wrapper):
+    ''' 設定 episode 最大 step 數 '''
+    
+    def __init__(self, env: gym.Env, max_steps: int):
+        super().__init__(env)
+        assert max_steps > 0
+        self._max_steps = max_steps
+        self._step_count: int = 0
+        
+    def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[Any, dict]:
+        self._step_count = 0
+        return self.env.reset(seed=seed, options=options)
+    
+    def step(self, action: int):
+        obs, rew, term, trun, info = self.env.step(action)
+        self._step_count += 1
+        
+        if self._step_count >= self._max_steps and not term:
+            trun = True
+            
+        return obs, rew, term, trun, info
+    
+class AsyncVectorEnvWrapper:
+    ''' 管理多個 evn instance 的平行收集 '''
+    
+    def __init__(self, env_fns: list):
+        ''' env_fns: list of callables (每個回傳一個 wrapped gym.Env) '''
+        self._envs = [fn() for fn in env_fns]
+        self._num_envs = len(env_fns)
+    
+    @property
+    def num_envs(self) -> int:
+        return self._num_envs
+        
+    def reset(self) -> tuple[list[Any], list[dict]]:
+        obs_list = []
+        info_list = []
+        
+        for env in self._envs:
+            reset_out = env.reset()
+            
+            obs, info = reset_out[0], reset_out[1]
+        
+            obs_list.append(obs)
+            info_list.append(info)
+            
+        return obs_list, info_list
+            
+    
+    def step(self, actions: np.ndarray) -> tuple[list[dict], np.ndarray, np.ndarray, np.ndarray, list[dict]]:
+        obs_list = []
+        rew_list = []
+        term_list = []
+        trun_list = []
+        info_list = []
+        
+        for i in range(self._num_envs):
+            action = actions[i]
+            obs, rew, term, trun, info = self._envs[i].step(action)
+            
+            if term or trun:
+                reset_obs, reset_info = self._envs[i].reset()
+                
+                info['reset_obs'] = reset_obs
+                info['final_observation'] = obs
+                info.update(reset_info)
+                
+            obs_list.append(obs)
+            rew_list.append(rew)
+            term_list.append(term)
+            trun_list.append(trun)
+            info_list.append(info)
+        
+        rews = np.array(rew_list, dtype=np.float32)
+        terms = np.array(term_list, dtype=bool)
+        truns = np.array(trun_list, dtype=bool)
+        
+        return obs_list, rews, terms, truns, info_list
+    
+    def close(self):
+        for env in self._envs:
+            env.close()
+
+def build_atari_wrappers(
+    env: gym.Env,
+    *,
+    action_repeat: int=4,
+    max_noop: int=0,
+    sticky_prob: float=0.0,
+    fire_reset: bool=False,
+    life_loss_terminal: bool=False,
+    reward_clip: Literal['sign', 'tanh', 'scale'] | None=None,
+    reward_scale: float=1.0,
+    grayscale: bool=True,
+    resize: tuple[int, int]=(64, 64),
+    frame_stack: int=1,
+    max_episode_steps: int=108000,
+    obs_key: str='image'
+) -> gym.Env:
+    if sticky_prob > 0:
+        env = StickyActionWrapper(env, sticky_prob)
+        
+    if max_noop > 0:
+        env = MaxNoopWrapper(env, max_noop)
+        
+    if fire_reset:
+        if 'FIRE' in env.unwrapped.get_action_meanings():
+            env = FireResetWrapper(env)
+            
+    if life_loss_terminal:
+        env = EpisodicLifeWrapper(env)
+        
+    assert action_repeat >= 1
+    if action_repeat > 1:
+        env = MaxAndSkipWrapper(env, repeat=action_repeat)
+        
+    if reward_clip is not None:
+        env = RewardClipWrapper(env, mode=reward_clip, scale=reward_scale)
+        
+    if grayscale:
+        env = GrayscaleWrapper(env, keep_dim=True)
+        
+    env = ResizeWrapper(env, size=resize)
+    
+    if frame_stack > 1:
+        env = FrameStackWrapper(env, num_stack=frame_stack)
+        
+    agent_steps = max_episode_steps // action_repeat
+    env = TimeLimitWrapper(env, max_steps=agent_steps)
+    
+    env = DictObsWrapper(env, obs_key=obs_key)
+    
+    return env
