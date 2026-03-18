@@ -36,7 +36,7 @@ class MaxNoopWrapper(gym.Wrapper):
         self._max_noop = max_noop
         self._noop_action = noop_action
         
-    def reset(self, *, seed: int | None, options: dict | None=None) -> tuple[np.ndarray, dict]:
+    def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[np.ndarray, dict]:
         obs, info = self.env.reset(seed=seed, options=options)
         noop_n = np.random.randint(0, self._max_noop + 1)
         
@@ -44,7 +44,7 @@ class MaxNoopWrapper(gym.Wrapper):
             obs, _, term, trun, info = self.env.step(self._noop_action)
             
             if term or trun:
-                return self.reset()
+                return self.reset(seed=seed, options=options)
         
         return obs, info
     
@@ -71,7 +71,7 @@ class FireResetWrapper(gym.Wrapper):
         obs, _, term, trun, info = self.env.step(self._fire_action)
         
         if term or trun:
-            return self.reset()
+            return self.reset(seed=seed, options=options)
             
         return obs, info
     
@@ -88,7 +88,7 @@ class EpisodicLifeWrapper(gym.Wrapper):
         
     def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[np.ndarray, dict]:
         if self._real_done:
-            obs, info = self.env.reset()
+            obs, info = self.env.reset(seed=seed, options=options)
         else:
             obs, _, term, trun, info = self.env.step(0) # NOOP
         
@@ -100,15 +100,13 @@ class EpisodicLifeWrapper(gym.Wrapper):
         self._real_done = term or trun
         lives = self.env.unwrapped.ale.lives()
         
-        life_loss = False
         if lives < self._lives and not term:
-            life_loss = True
             term = True
         
         self._lives = lives
         info['real_terminated'] = self._real_done
         
-        return obs, rew, (term or life_loss), trun, info
+        return obs, rew, term, trun, info
     
 class ActionRepeatWrapper(gym.Wrapper):
     ''' 同一個動作重複做 N 次， reward 累加 '''
@@ -119,16 +117,16 @@ class ActionRepeatWrapper(gym.Wrapper):
         self._repeat = repeat
         
     def step(self, action: int):
-        sum = 0.0
+        total = 0.0
         
         for _ in range(self._repeat):
             obs, rew, term, trun, info = self.env.step(action)
-            sum += rew
+            total += rew
             
             if term or trun:
                 break
             
-        return obs, sum, term, trun, info
+        return obs, total, term, trun, info
     
 class MaxAndSkipWrapper(gym.Wrapper):
     ''' 取最後2幀, 然後做 Action repeat '''
@@ -141,25 +139,28 @@ class MaxAndSkipWrapper(gym.Wrapper):
 
     def step(self, action: int):
         self._obs_buffer = []
-        sum = 0.0
+        total = 0.0
 
         for _ in range(self._repeat):
             obs, rew, term, trun, info = self.env.step(action)
-            sum += rew
+            total += rew
             self._obs_buffer.append(obs)
 
             if term or trun:
                 break
         
-        max_obs = np.maximum(self._obs_buffer[-1], self._obs_buffer[-2])
+        if len(self._obs_buffer) >= 2:
+            max_obs = np.maximum(self._obs_buffer[-1], self._obs_buffer[-2])
+        else:
+            max_obs = self._obs_buffer[-1]
 
-        return max_obs, sum, term, trun, info
+        return max_obs, total, term, trun, info
     
     def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[np.ndarray, dict]:
         self._obs_buffer = []
         return self.env.reset(seed=seed, options=options)
 
-class GrayscaleWrapper(gym.Wrapper):
+class GrayscaleWrapper(gym.ObservationWrapper):
     ''' RGB to gray '''
 
     def __init__(self, env: gym.Env, keep_dim: bool=True):
@@ -203,7 +204,7 @@ class ResizeWrapper(gym.ObservationWrapper):
         if len(old_space.shape) == 3:
             channels = old_space.shape[-1]
             new_shape = (*size, channels)
-        elif len(old_space) == 2:
+        elif len(old_space.shape) == 2:
             new_shape = size
         else:
             raise ValueError(f'Expected 2D or 3D obs, got shape {old_space.shape}')
@@ -214,7 +215,7 @@ class ResizeWrapper(gym.ObservationWrapper):
     
     def observation(self, obs: np.ndarray) -> np.ndarray:
         resized = cv2.resize(obs, self._size[::-1], interpolation=cv2.INTER_AREA)
-        if obs.ndim == 3:
+        if resized.ndim == 2 and obs.ndim == 3:
             resized = resized[..., np.newaxis]
         return resized.astype(np.uint8)
     
@@ -259,7 +260,7 @@ class RewardClipWrapper(gym.Wrapper):
 
     def step(self, action: int):
         obs, rew, term, trun, info = self.env.step(action)
-        info['reward'] = rew
+        info['raw_reward'] = rew
 
         if self._mode == 'sign':
             rew = np.sign(rew)
@@ -282,17 +283,18 @@ class DictObsWrapper(gym.Wrapper):
         
     def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[dict, dict]:
         obs, info = self.env.reset(seed=seed, options=options)
-        self._is_first = True
         
-        dict_oct = {
+        dict_obs = {
             self._obs_key: obs,
             'reward': np.float32(0.0),
             'is_first': np.bool_(True),
-            'is_last': np.bool_(True),
+            'is_last': np.bool_(False),
             'is_terminal': np.bool_(False)
         }
         
-        return (dict_oct, info)
+        self._is_first = False
+        
+        return (dict_obs, info)
     
     def step(self, action: int):
         obs, rew, term, trun, info = self.env.step(action)
@@ -301,7 +303,7 @@ class DictObsWrapper(gym.Wrapper):
         
         dict_obs = {
             self._obs_key: obs,
-            'reward': rew,
+            'reward': np.float32(rew),
             'is_first': np.bool_(self._is_first),
             'is_last': np.bool_(is_last),
             'is_terminal': np.bool_(is_term)
@@ -376,7 +378,7 @@ class AsyncVectorEnvWrapper:
                 
                 info['reset_obs'] = reset_obs
                 info['final_observation'] = obs
-                info.update(reset_info)
+                obs = reset_obs
                 
             obs_list.append(obs)
             rew_list.append(rew)
