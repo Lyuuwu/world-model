@@ -275,9 +275,10 @@ class RSSM(nn.Module):
     
     def imagine(
         self,
-        state: dict[str, torch.Tensor],                    # 起始 state (B, ...)
-        policy: Callable[[torch.Tensor], torch.Tensor],    # feat → action
-        horizon: int,
+        state: dict[str, torch.Tensor],                                 # 起始 state (B, ...)
+        policy: Callable[[torch.Tensor], torch.Tensor] | None = None,   # feat → action
+        horizon: int = 15,
+        action_seq: torch.Tensor | None = None
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
         """
         多步 imagination rollout
@@ -287,11 +288,20 @@ class RSSM(nn.Module):
             actions = (B, H, action_dim)
         """
         
+        assert (policy is None) != (action is None), \
+            'Exactly one of policy_fn or action_sequence must be provided'
+        
+        if action_seq is not None:
+            horizon = action_seq.shape[1]
+        
         feats = []
         actions = []
         for t in range(horizon):
-            feat = self.get_feat(state)
-            action = policy(feat.detach())
+            if policy is not None:
+                feat = self.get_feat(state)
+                action = policy(feat.detach())
+            else:
+                action = action_seq[:, t]
             
             state, feat_t = self.imagine_step(state, action)
 
