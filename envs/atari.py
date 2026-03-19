@@ -9,7 +9,7 @@ from .wrapper import (
     TimeLimitWrapper, DictObsWrapper
 )
 
-def build_atari_wrappers(
+def make_atari(
     env: gym.Env,
     *,
     action_repeat: int=4,
