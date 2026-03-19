@@ -1,0 +1,12 @@
+# pyproject.toml（根目錄）
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "world-model"
+version = "0.1.0"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shared*", "agents*", "envs*", "evaluation*"]

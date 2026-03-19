@@ -3,4 +3,5 @@ file structure.txt
 .pytest_cache/
 __pycache__/
 shared.egg-info/
+world_model.egg-info/
 tests/
