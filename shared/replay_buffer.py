@@ -88,7 +88,7 @@ class EpisodeReplayBuffer:
         self._evict()
                 
     def _commit_ongoing(self):
-        if self._ongoing is not None:
+        if self._ongoing is None:
             return
         
         data = self._ongoing.finalize()

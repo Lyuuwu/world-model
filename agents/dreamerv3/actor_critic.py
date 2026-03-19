@@ -435,3 +435,5 @@ class DreamerActorCritic(nn.Module):
             metrics['imag/rand'] = ((entropy.mean() - lo) / (hi - lo)).detach()
             
         return metrics
+    
+register('actor_critic', 'dreamerv3')(DreamerActorCritic)

@@ -10,7 +10,6 @@ from shared.math_utils import symlog
 from shared.networks.cnn import CNNEncoder, compute_cnn_out_dim
 from shared.networks.mlp import MLP
 
-@register('encoder', 'dreamerv3')
 class DreamerEncoder(nn.Module):
     """
     - image keys  → CNNEncoder → flatten
@@ -151,3 +150,5 @@ class DreamerEncoder(nn.Module):
         tokens = tokens.reshape(*bshape, -1)
         
         return tokens
+    
+register('encoder', 'dreamerv3')(DreamerEncoder)

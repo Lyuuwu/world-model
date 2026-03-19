@@ -322,24 +322,3 @@ class DreamerDecoder(nn.Module):
 
 from shared.registry import register
 register('decoder', 'dreamerv3')(DreamerDecoder)
-
-#
-# YAML config 範例:
-#
-# decoder:
-#   type: dreamerv3
-#   h_dim: 4096
-#   stoch: 32
-#   classes: 32
-#   img_size: [64, 64]
-#   depth: 64
-#   mults: [2, 3, 4, 4]
-#   kernel: 5
-#   upsample: upsample
-#   bspace: 8
-#   units: 1024
-#   mlp_layers: 3
-#   symlog_vecs: true
-#   norm: rms
-#   act: silu
-#   outscale: 1.0

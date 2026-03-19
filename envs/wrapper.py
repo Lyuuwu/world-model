@@ -44,7 +44,7 @@ class MaxNoopWrapper(gym.Wrapper):
             obs, _, term, trun, info = self.env.step(self._noop_action)
             
             if term or trun:
-                return self.reset(seed=seed, options=options)
+                return self.reset(options=options)
         
         return obs, info
     
@@ -71,7 +71,7 @@ class FireResetWrapper(gym.Wrapper):
         obs, _, term, trun, info = self.env.step(self._fire_action)
         
         if term or trun:
-            return self.reset(seed=seed, options=options)
+            return self.reset(options=options)
             
         return obs, info
     
@@ -91,6 +91,9 @@ class EpisodicLifeWrapper(gym.Wrapper):
             obs, info = self.env.reset(seed=seed, options=options)
         else:
             obs, _, term, trun, info = self.env.step(0) # NOOP
+            if term or trun:
+                self._real_done = True
+                obs, info = self.env.reset(seed=seed, options=options)
         
         self._lives = self.env.unwrapped.ale.lives()
         return obs, info
@@ -109,7 +112,11 @@ class EpisodicLifeWrapper(gym.Wrapper):
         return obs, rew, term, trun, info
     
 class ActionRepeatWrapper(gym.Wrapper):
-    ''' 同一個動作重複做 N 次， reward 累加 '''
+    '''
+    同一個動作重複做 N 次， reward 累加
+    
+    給非 Atari 用的
+    '''
     
     def __init__(self, env: gym.Env, repeat: int=4):
         super().__init__(env)
@@ -299,7 +306,7 @@ class DictObsWrapper(gym.Wrapper):
     def step(self, action: int):
         obs, rew, term, trun, info = self.env.step(action)
         is_last = term or trun
-        is_term = term
+        is_term = info.get('real_terminated', term)
         
         dict_obs = {
             self._obs_key: obs,
@@ -335,7 +342,7 @@ class TimeLimitWrapper(gym.Wrapper):
             
         return obs, rew, term, trun, info
     
-class AsyncVectorEnvWrapper:
+class SyncVectorEnvWrapper:
     ''' 管理多個 evn instance 的平行收集 '''
     
     def __init__(self, env_fns: list):
@@ -372,13 +379,6 @@ class AsyncVectorEnvWrapper:
         for i in range(self._num_envs):
             action = actions[i]
             obs, rew, term, trun, info = self._envs[i].step(action)
-            
-            if term or trun:
-                reset_obs, reset_info = self._envs[i].reset()
-                
-                info['reset_obs'] = reset_obs
-                info['final_observation'] = obs
-                obs = reset_obs
                 
             obs_list.append(obs)
             rew_list.append(rew)

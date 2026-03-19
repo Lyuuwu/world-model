@@ -3,6 +3,7 @@ from typing import Callable
 import torch
 import torch.nn as nn
 
+from shared.registry import register
 from shared.networks.mlp import NormedLinear, LinearHead
 from shared.networks.gru import NormedBlockGRUCell
 from shared.networks.distributions import StraightThroughCategorical
@@ -345,3 +346,5 @@ class RSSM(nn.Module):
         }
         
         return (dyn_loss, rep_loss, metrics)
+    
+register('rssm', 'dreamerv3')(RSSM)
