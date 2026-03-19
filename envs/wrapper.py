@@ -287,12 +287,19 @@ class DictObsWrapper(gym.Wrapper):
         super().__init__(env)
         self._obs_key = obs_key
         self._is_first: bool = True
-        
+    
+    @staticmethod
+    def _to_chw(obs: np.ndarray) -> np.ndarray:
+        ''' (H, W, C) -> (C, H, W) '''
+        if obs.ndim == 3 and obs.shape[2] < obs.shape[0]:
+            return obs.transpose(2, 0, 1)
+        return obs
+    
     def reset(self, *, seed: int | None=None, options: dict | None=None) -> tuple[dict, dict]:
         obs, info = self.env.reset(seed=seed, options=options)
         
         dict_obs = {
-            self._obs_key: obs,
+            self._obs_key: self._to_chw(obs),
             'reward': np.float32(0.0),
             'is_first': np.bool_(True),
             'is_last': np.bool_(False),
@@ -309,7 +316,7 @@ class DictObsWrapper(gym.Wrapper):
         is_term = info.get('real_terminated', term)
         
         dict_obs = {
-            self._obs_key: obs,
+            self._obs_key: self._to_chw(obs),
             'reward': np.float32(rew),
             'is_first': np.bool_(self._is_first),
             'is_last': np.bool_(is_last),
@@ -379,6 +386,10 @@ class SyncVectorEnvWrapper:
         for i in range(self._num_envs):
             action = actions[i]
             obs, rew, term, trun, info = self._envs[i].step(action)
+            
+            if term or trun:
+                info['final_observation'] = obs
+                obs, _ = self._envs[i].reset()
                 
             obs_list.append(obs)
             rew_list.append(rew)

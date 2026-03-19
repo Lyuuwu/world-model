@@ -289,7 +289,7 @@ class RSSM(nn.Module):
             actions = (B, H, action_dim)
         """
         
-        assert (policy is None) != (action is None), \
+        assert (policy is None) != (action_seq is None), \
             'Exactly one of policy_fn or action_sequence must be provided'
         
         if action_seq is not None:

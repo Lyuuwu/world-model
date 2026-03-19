@@ -61,7 +61,7 @@ class CategoricalDist(Dist):
         return (torch.log_softmax(self._logits, dim=-1) * onehot).sum(-1)
     
     def entropy(self):
-        logprob = torch.log_softmax(self._logits)
+        logprob = torch.log_softmax(self._logits, dim=-1)
         prob = torch.softmax(self._logits, -1)
         return -(prob * logprob).sum(-1)
     
@@ -95,10 +95,6 @@ class StraightThroughCategorical(Dist):
         return self.dist._logits
 
     @property
-    def probs(self) -> torch.Tensor:
-        return self.dist._probs
-
-    @property
     def mode(self) -> torch.Tensor:
         onehot = F.one_hot(self.dist.mode, self.dist._num_classes).detach()
         return onehot.float()
@@ -114,8 +110,9 @@ class StraightThroughCategorical(Dist):
         # 中獎的地方設成1 (one-hot)
         one_hot = F.one_hot(idx, num_classes=self.dist._num_classes).float()
         
-        # 讓梯度能夠從 self._probs 流過去
-        res = self.dist._probs + (one_hot - self.dist._probs).detach()
+        # 讓梯度能夠從 probs 流過去
+        probs = torch.softmax(self.dist._logits, dim=-1)
+        res = probs + (one_hot - probs).detach()
         
         return res
         
@@ -131,8 +128,8 @@ class StraightThroughCategorical(Dist):
         log_probs = torch.log_softmax(self.dist._logits, dim=-1)
         return (event * log_probs).sum(dim=-1)
 
-    def entropy(self, eps: float=1e-8) -> torch.Tensor:
-        return self.dist.entropy(eps=eps)
+    def entropy(self) -> torch.Tensor:
+        return self.dist.entropy()
 
     def kl(self, other: 'StraightThroughCategorical'):
         return self.dist.kl(other.dist)

@@ -65,6 +65,7 @@ class InterleavedTrainer(TrainerBase):
             if self.buffer.total_steps >= seed_steps:
                 for _ in range(train_ratio):
                     batch = self.buffer.sample(batch_size, seq_len)
+                    batch = self._normalize_batch(batch)
                     metrics = self.agent.train_step(batch)
  
                     # 累計 metrics 做 smoothing
@@ -103,3 +104,11 @@ class InterleavedTrainer(TrainerBase):
                 self._save_checkpoint(tag=self._global_env_step)
  
         print(f'[Train] Done. Total env steps: {self._global_env_step}')
+        
+    def _normalize_batch(self, batch: dict) -> dict:
+        """Ensure flag tensors have correct dtypes."""
+        bool_keys = {"is_first", "is_last", "is_terminal", "reset"}
+        return {
+            k: v.bool() if k in bool_keys and v.is_floating_point() else v
+            for k, v in batch.items()
+        }

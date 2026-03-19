@@ -169,7 +169,7 @@ class TrainerBase(ABC):
  
                 if done:
                     # done step: 存 final obs
-                    final_obs = infos[i].get('final_observation', next_obs_list[i])
+                    final_obs = infos[i].get('final_observation', obs_list[i])
                     self.buffer.add_step(
                         obs=final_obs,
                         action=action_onehot,
