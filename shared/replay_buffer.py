@@ -133,7 +133,7 @@ class EpisodeReplayBuffer:
         for key in keys:
             stacked = np.stack([seq[key] for seq in sequences], axis=0)
             
-            if stacked.dtype == np.unit8:
+            if stacked.dtype == np.uint8:
                 tensor = torch.from_numpy(stacked).to(
                     dtype=torch.float32, device=self._device
                 ) / 255.0
