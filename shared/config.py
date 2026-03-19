@@ -59,7 +59,7 @@ def parse_overrides(override_str: str | None) -> dict:
 def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         data = yaml.safe_load(f)
     return data or {}
 

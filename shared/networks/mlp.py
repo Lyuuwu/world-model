@@ -72,6 +72,9 @@ def trunc_normal_init_(tensor: torch.Tensor, fan: str='in', scale: float=1.0):
     if tensor.ndim < 2:
         return nn.init.zeros_(tensor)
     
+    if scale == 0.0:
+        return nn.init.zeros_(tensor)
+    
     if fan == 'in':
         fan_val = tensor.shape[1] * (math.prod(tensor.shape[2:]) if tensor.ndim > 2 else 1)
     elif fan == 'out':

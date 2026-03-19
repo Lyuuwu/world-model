@@ -10,6 +10,7 @@ task 格式: "{domain}_{game}", e.g. "atari_pong", "crafter_crafter"
 from typing import Callable, Any
 from functools import partial
 
+import ale_py
 import gymnasium as gym
 import numpy as np
 
@@ -130,3 +131,5 @@ def get_spaces(task: str, env_config: dict | None = None):
 
     env.close()
     return obs_space, num_actions
+
+gym.register_envs(ale_py)

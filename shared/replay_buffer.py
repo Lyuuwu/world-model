@@ -52,7 +52,7 @@ class EpisodeReplayBuffer:
         self._min_episode_len = min_episode_len
         self._device = device
         
-        self._episodes = list[dict[str, np.ndarray]] = []
+        self._episodes: list[dict[str, np.ndarray]] = []
         self._episode_lenghts: list[int] = []
         self._total_steps: int = 0
         
@@ -63,7 +63,7 @@ class EpisodeReplayBuffer:
         obs: dict,
         action: np.ndarray,
         reward: float,
-        done: bool,
+        is_terminal: bool,
         is_first: bool,
         is_last: bool
     ):
@@ -73,9 +73,9 @@ class EpisodeReplayBuffer:
             self._ongoing = Episode()
         
         assert self._ongoing is not None, 'Must call add_step with is_first=True first'
-        self._ongoing.add(obs, action, reward, is_first=is_first, is_last=is_last, is_terminal=done)
+        self._ongoing.add(obs, action, reward, is_first=is_first, is_last=is_last, is_terminal=is_terminal)
         
-        if done:
+        if is_terminal:
             self._commit_ongoing()
             
     def add_episode(self, episode_data: dict[str, np.ndarray]):
