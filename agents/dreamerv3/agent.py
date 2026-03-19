@@ -87,7 +87,7 @@ class DreamerV3Agent(nn.Module):
     ) -> dict[str, torch.Tensor]:
         return self.world_model.initial_state(batch_size, device)
     
-    def inital_prevact(
+    def initial_prevact(
         self,
         batch_size: int,
         device: torch.device = torch.device('cpu')
@@ -105,7 +105,7 @@ class DreamerV3Agent(nn.Module):
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         
         # --- encoder 加工成 token ---
-        obs_seq = {k: v.unsqueeze(1) for k, v in obs.items
+        obs_seq = {k: v.unsqueeze(1) for k, v in obs.items()
                    if k not in ('is_first', 'is_last', 'is_terminal', 'reward')}
         tokens = self.world_model.encoder(obs_seq)
         
@@ -212,7 +212,7 @@ class DreamerV3Agent(nn.Module):
         metrics.update(imag_metrics)
         
         if config.repval_loss:
-            feat = self.world_model._get_feat(wm_out.rssm_outputs)
+            feat = wm_out.feat
             if not config.repval_grad:
                 feat = feat.detach()
                 

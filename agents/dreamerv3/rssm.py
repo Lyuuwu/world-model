@@ -299,7 +299,7 @@ class RSSM(nn.Module):
         for t in range(horizon):
             if policy is not None:
                 feat = self.get_feat(state)
-                action = policy(feat.detach())
+                action = policy(feat)
             else:
                 action = action_seq[:, t]
             

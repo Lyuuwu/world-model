@@ -272,16 +272,12 @@ class DreamerWorldModel(nn.Module):
     def compute_loss(
         self,
         obs: dict[str, torch.Tensor],
-        action: torch.Tensor,
-        reset: torch.Tensor,
+        wm_out: WorldModelOutputs,
         state: dict[str, torch.Tensor] | None=None
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        B, T = reset.shape
+        B, T = obs['is_first'].shape
         losses:  dict[str, torch.Tensor] = {}
         metrics: dict[str, torch.Tensor] = {}
-        
-        # observe
-        wm_out = self.observe(obs, action, reset, state)
         
         # KL losses
         dyn_loss, rep_loss, kl_metrics = self.rssm.kl_loss(
