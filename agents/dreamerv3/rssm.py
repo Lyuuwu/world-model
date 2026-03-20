@@ -8,6 +8,7 @@ from shared.networks.mlp import NormedLinear, LinearHead
 from shared.networks.gru import NormedBlockGRUCell
 from shared.networks.distributions import StraightThroughCategorical
 
+@register('rssm', 'dreamerv3')
 class RSSM(nn.Module):
     """
     DreamerV3 Recurrent State-Space Model
@@ -346,5 +347,3 @@ class RSSM(nn.Module):
         }
         
         return (dyn_loss, rep_loss, metrics)
-    
-register('rssm', 'dreamerv3')(RSSM)

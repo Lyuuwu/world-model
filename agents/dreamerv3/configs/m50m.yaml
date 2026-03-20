@@ -34,11 +34,11 @@ wm_kwargs:
   rssm_hidden: 1024         # 2d
   enc_depth: 32             # d/16
   enc_mults: [2, 3, 4, 4]
-  enc_kernel: 4
+  enc_kernel: 5
   img_size: [64, 64]
   dec_depth: 32
   dec_mults: [2, 3, 4, 4]
-  dec_kernel: 4
+  dec_kernel: 5
   units: 512
   head_layers: 5
   reward_bins: 255

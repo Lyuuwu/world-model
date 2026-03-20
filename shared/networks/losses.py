@@ -1,10 +1,8 @@
-from ..registry import register
 from .base import Output
 from .distributions import Dist
 
 import torch
 
-@register('loss', 'mse')
 class MSE(Output):
     def __init__(self, mean: torch.Tensor, squash=None):
         super().__init__()
@@ -20,7 +18,6 @@ class MSE(Output):
         assert self._mean.shape == target.shape, (self._mean.shape, target.shape)
         return torch.square(self._mean - self._squash(target).detach())
 
-@register('loss', 'huber')
 class Huber(Output):
     def __init__(self, mean: torch.Tensor, eps: float=1.0):
         super().__init__()

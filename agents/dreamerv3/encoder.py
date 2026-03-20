@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from shared.registry import register
 from shared.obs_spec import ObsSpec
 from shared.math_utils import symlog
 from shared.networks.cnn import CNNEncoder, compute_cnn_out_dim
@@ -150,5 +149,3 @@ class DreamerEncoder(nn.Module):
         tokens = tokens.reshape(*bshape, -1)
         
         return tokens
-    
-register('encoder', 'dreamerv3')(DreamerEncoder)

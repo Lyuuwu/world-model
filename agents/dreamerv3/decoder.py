@@ -315,10 +315,3 @@ class DreamerDecoder(nn.Module):
                     recons[key] = Agg(MSE(raw, squash), agg_dims=len(info['shape']))
                                 
         return recons
-
-# ═══════════════════════════════════════════════════════════════
-#  Registry registration
-# ═══════════════════════════════════════════════════════════════
-
-from shared.registry import register
-register('decoder', 'dreamerv3')(DreamerDecoder)

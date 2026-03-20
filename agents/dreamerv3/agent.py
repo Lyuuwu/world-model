@@ -10,6 +10,7 @@ from .types import DreamerV3Config
 from .world_model import DreamerWorldModel, WorldModelOutputs, ImaginedTrajectory
 from .actor_critic import DreamerActorCritic
 
+@register('agent', 'dreamerv3')
 class DreamerV3Agent(nn.Module):
     def __init__(
         self,
@@ -289,5 +290,3 @@ class DreamerV3Agent(nn.Module):
     #     B, T = obs['is_first'].shape
     #     half = T // 2
     #     num_videos = min(num_videos, B)
-    
-register('agent', 'dreamerv3')(DreamerV3Agent)

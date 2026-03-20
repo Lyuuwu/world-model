@@ -173,6 +173,7 @@ def lambda_return(
         rets.append(interm[:, t] + live[:, t] * cont[:, t] * rets[-1])
     
     return torch.stack(list(reversed(rets))[:-1], dim=1)
+@register('actor_critic', 'dreamerv3')
 class DreamerActorCritic(nn.Module):
     def __init__(
         self,
@@ -435,5 +436,3 @@ class DreamerActorCritic(nn.Module):
             metrics['imag/rand'] = ((entropy.mean() - lo) / (hi - lo)).detach()
             
         return metrics
-    
-register('actor_critic', 'dreamerv3')(DreamerActorCritic)

@@ -67,6 +67,7 @@ class ContinueHead(nn.Module):
         logit = self.head(self.mlp(feat)).squeeze(-1)
         return BinaryDist(logit)
     
+@register('world_model', 'dreamerv3')
 class DreamerWorldModel(nn.Module):
     
     def __init__(
@@ -393,5 +394,3 @@ class DreamerWorldModel(nn.Module):
         feat = self.rssm.get_feat(states).unsqueeze(1)   # (B*K, feat_dim) -> (B*K, 1, feat_dim)
         
         return states, feat
-    
-register('world_model', 'dreamerv3')(DreamerWorldModel)
