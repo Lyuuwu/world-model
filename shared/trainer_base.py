@@ -98,6 +98,21 @@ class SimpleLogger:
     def close(self):
         if self._writer:
             self._writer.close()
+
+    @staticmethod
+    def _to_scalar(v: Any) -> float | None:
+        '''任意值轉 Python float, 無法轉回傳 None。'''
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, torch.Tensor) and v.numel() == 1:
+            return v.item()
+        if isinstance(v, np.ndarray) and v.size == 1:
+            return float(v.flat[0])
+        return None
+    
+    @property
+    def jsonl_path(self) -> Path:
+        return self._jsonl_path
             
 class TrainerBase(ABC):
     '''
