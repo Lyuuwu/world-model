@@ -68,6 +68,7 @@ def compose_config(
     task: str,
     override_str: str | None = None,
     project_root: Path | None = None,
+    profile: str | None = None
 ) -> dict:
     """
     組合 config
@@ -84,6 +85,13 @@ def compose_config(
     # --- Layer 2: agent default ---
     agent_dir = project_root / 'agents' / agent / 'configs'
     deep_update(config, _load_yaml(agent_dir / 'default.yaml'))
+
+    # --- Layer 2.5: profile ---
+    if profile:
+        profile_path = agent_dir / f'{profile}.yaml'
+        if not profile_path.exists():
+            raise FileNotFoundError(f'Profile not found: {profile_path}')
+        deep_update(config, _load_yaml(profile_path))
  
     # --- Layer 3: task domain ---
     domain = task.split('_', 1)[0]  # "atari_pong" → "atari"

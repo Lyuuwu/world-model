@@ -23,6 +23,8 @@ def parse_args() -> argparse.Namespace:
                    help='Comma-separated key=value overrides (e.g. "lr=3e-4,batch_size=32")')
     p.add_argument('--resume', type=str, default=None,
                    help='Path to checkpoint directory for resume')
+    p.add_argument('--profile', type=str, default=None,
+                   help='Model size profile')
     return p.parse_args()
  
  
@@ -154,6 +156,7 @@ def main():
         task=args.task,
         override_str=args.override,
         project_root=PROJECT_ROOT,
+        profile=args.profile
     )
  
     # CLI args 優先
