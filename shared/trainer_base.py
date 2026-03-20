@@ -1,4 +1,5 @@
 import random
+import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ def stack_dict_list(
     
     [{key: (H,W,C)}, ...] > {key: (B, H, W, C)}
  
-    image 保持 uint8 (轉 tensor 但不轉 float，讓 agent 自己處理 /255)
+    image 保持 uint8
           
     scalar (reward, is_first, ...) 轉 float32 or bool
     '''
@@ -56,12 +57,33 @@ class SimpleLogger:
                 self._writer = SummaryWriter(str(self._log_dir))
             except ImportError:
                 print('[Logger] tensorboard not installed, falling back to console only')
+        
+        self._jsonl_path = self._log_dir / 'metrics.jsonl'
+        self._jsonl_file = open(self._jsonl_path, 'a', buffering=1, encoding='utf-8')
  
     def log(self, metrics: dict[str, float], step: int, prefix: str = ''):
-        if self._writer:
-            for k, v in metrics.items():
-                tag = f'{prefix}/{k}' if prefix else k
-                self._writer.add_scalar(tag, v, step)
+        '''
+        寫入 TensorBoard + JSONL
+        '''
+        record: dict[str, Any] = {'step': step}
+ 
+        for k, v in metrics.items():
+            tag = f'{prefix}/{k}' if prefix else k
+ 
+            # TensorBoard
+            if self._writer:
+                scalar = self._to_scalar(v)
+                if scalar is not None:
+                    self._writer.add_scalar(tag, scalar, step)
+ 
+            # JSONL: 只寫數值型
+            scalar = self._to_scalar(v)
+            if scalar is not None:
+                record[tag] = scalar
+ 
+        # step 之外至少有一個數值才寫行，避免空行污染
+        if len(record) > 1:
+            self._jsonl_file.write(json.dumps(record) + '\n')
  
     def log_print(self, metrics: dict[str, float], step: int, prefix: str = ''):
         self.log(metrics, step, prefix)
