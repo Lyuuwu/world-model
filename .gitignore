@@ -6,3 +6,4 @@ shared.egg-info/
 world_model.egg-info/
 tests/
 checkpoints/
+runs/

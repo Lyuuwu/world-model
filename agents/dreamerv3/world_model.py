@@ -33,7 +33,7 @@ class RewardHead(nn.Module):
         
         self.mlp = MLP(feat_dim, units, layers, norm, act)
         self.head = LinearHead(units, bins, outscale)
-        self._bins = build_symexp_bins(bins)
+        self.register_buffer('_bins', build_symexp_bins(), persistent=False)
         
     def forward(self, feat: torch.Tensor) -> TwoHotCategorical:
         '''
@@ -226,9 +226,6 @@ class DreamerWorldModel(nn.Module):
     
     def _make_continue_target(self, obs: dict[str, torch.Tensor]) -> torch.Tensor:
         con = (~obs['is_terminal']).float()
-        
-        if self.contdisc:
-            con = con * (1.0 - 1.0 / self.horizon)
             
         return con
     

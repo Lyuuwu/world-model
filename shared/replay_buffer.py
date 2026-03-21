@@ -133,9 +133,14 @@ class EpisodeReplayBuffer:
         for key in keys:
             stacked = np.stack([seq[key] for seq in sequences], axis=0)
             
-            tensor = torch.from_numpy(stacked).to(
-                dtype=torch.float32, device=self._device
-            )
+            if stacked.dtype == np.bool_:
+                tensor = torch.from_numpy(stacked).to(device=self._device)
+            elif stacked.dtype == np.uint8:
+                tensor = torch.from_numpy(stacked).to(device=self._device)
+            else:
+                tensor = torch.from_numpy(stacked).to(
+                    dtype=torch.float32, device=self._device
+                )
             
             batch[key] = tensor
             

@@ -6,8 +6,8 @@
 trainer: interleaved
 total_env_steps: 100000
 seed_steps: 1024
-batch_size: 8               # ⚠ OOM 邊界，建議先跑幾步確認再加大
-seq_len: 32                 # ↓ 2x，降低 BPTT 展開深度
+batch_size: 16
+seq_len: 32
 train_ratio: 1
 
 buffer_capacity: 1000000
@@ -55,7 +55,7 @@ ac_kwargs:
   value_layers: 5
   policy_units: 512
   value_units: 512
-  imag_horizon: 12          # ↓ 3（原 15），imagination 是 VRAM 二號殺手
+  imag_horizon: 12
   gamma: 0.997
   lambda_: 0.95
   entropy_scale: 3.0e-4
