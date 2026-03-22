@@ -5,6 +5,7 @@ import torch.nn as nn
 import numpy as np
  
 from shared.registry import register
+from shared.optimizer import LaProp
 
 from .types import DreamerV3Config
 from .world_model import DreamerWorldModel, WorldModelOutputs, ImaginedTrajectory
@@ -51,11 +52,19 @@ class DreamerV3Agent(nn.Module):
         
         # --- optimizer ---
         
-        self.optimizer = torch.optim.Adam(
+        # self.optimizer = torch.optim.Adam(
+        #     self.parameters(),
+        #     lr=config.lr,
+        #     betas=(config.beta1, config.beta2),
+        #     eps=config.eps
+        # )
+        
+        self.optimizer = LaProp(
             self.parameters(),
-            lr=config.lr,
-            betas=(config.beta1, config.beta2),
-            eps=config.eps
+            lr = config.lr,
+            betas = (config.beta1, config.beta2),
+            eps = config.eps,
+            agc=config.agc
         )
         
     def _build_loss_scales(
@@ -143,9 +152,6 @@ class DreamerV3Agent(nn.Module):
         # --- backward + optimizer step ---
         self.optimizer.zero_grad()
         total_loss.backward()
-        
-        if self.config.agc > 0:
-            self._agc_clip(self.config.agc)
             
         self.optimizer.step()
         

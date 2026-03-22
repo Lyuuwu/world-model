@@ -1,13 +1,12 @@
 # ============================================================
-# agents/dreamerv3/configs/m50m.yaml  ── 論文 M / 50M 規格
-# d=512，8GB 邊界配置（batch=8, seq=32）
-# 注意：imagination rollout 是 VRAM 第二殺手，imag_horizon 保守設 12
+# agents/dreamerv3/configs/s25m.yaml  ── 論文 S+ / 25M 規格
+# d=384，batch/seq 略減以確保 8GB 安全
 # ============================================================
 trainer: interleaved
 total_env_steps: 100000
 seed_steps: 1024
-batch_size: 16
-seq_len: 32
+batch_size: 12              # 略減（原 16），避免 OOM 邊界
+seq_len: 64
 train_ratio: 1
 
 buffer_capacity: 1000000
@@ -26,20 +25,20 @@ horizon: 333
 contdisc: true
 
 wm_kwargs:
-  # d = 512
-  h_dim: 2048               # 4d
+  # d = 384
+  h_dim: 1536               # 4d
   stoch: 32
-  classes: 32               # d/16
+  classes: 24               # d/16
   rssm_blocks: 8
-  rssm_hidden: 1024         # 2d
-  enc_depth: 32             # d/16
+  rssm_hidden: 768          # 2d
+  enc_depth: 24             # d/16
   enc_mults: [2, 3, 4, 4]
   enc_kernel: 5
   img_size: [64, 64]
-  dec_depth: 32
+  dec_depth: 24
   dec_mults: [2, 3, 4, 4]
   dec_kernel: 5
-  units: 512
+  units: 384
   head_layers: 5
   reward_bins: 255
   dyn_scale: 1.0
@@ -53,9 +52,9 @@ wm_kwargs:
 ac_kwargs:
   policy_layers: 5
   value_layers: 5
-  policy_units: 512
-  value_units: 512
-  imag_horizon: 12
+  policy_units: 384
+  value_units: 384
+  imag_horizon: 15
   gamma: 0.997
   lambda_: 0.95
   entropy_scale: 3.0e-4
