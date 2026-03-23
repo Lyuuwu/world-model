@@ -1,4 +1,5 @@
 import math
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
@@ -14,7 +15,12 @@ class DreamerEncoder(nn.Module):
     - image keys  → CNNEncoder → flatten
     - vector keys → symlog (optional) → MLP
     
-    All paths concat'd → single token vector passed to RSSM posterior.
+    forward in:
+        - images:  (B, T, C, H, W)
+        - vectors: (B, T, *obs_shape)
+    
+    forward out:
+        - (B, T, token_dim) | token_dim = cnn_flat + mlp_units
     """
 
     def __init__(
@@ -149,3 +155,19 @@ class DreamerEncoder(nn.Module):
         tokens = tokens.reshape(*bshape, -1)
         
         return tokens
+
+    if TYPE_CHECKING:
+        def __call__(
+            self,
+            obs: dict[str, torch.Tensor],
+            bdims: int=2
+        ):
+            '''
+            forward in:
+                - images:  (B, T, C, H, W)
+                - vectors: (B, T, *obs_shape)
+            
+            forward out:
+                - (B, T, token_dim) | token_dim = cnn_flat + mlp_units
+            '''
+            ...

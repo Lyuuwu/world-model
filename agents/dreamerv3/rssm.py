@@ -198,15 +198,23 @@ class RSSM(nn.Module):
     
     def observe_step(
         self,
-        state: dict[str, torch.Tensor],    # previous state
-        tokens: torch.Tensor,              # (B, token_dim) encoder output
-        action: torch.Tensor,              # (B, action_dim)
-        reset: torch.Tensor,               # (B,) bool — episode 開頭
+        state: dict[str, torch.Tensor],
+        tokens: torch.Tensor,
+        action: torch.Tensor,
+        reset: torch.Tensor,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         """
         單步 posterior transition
 
-        return: (next_state, output)
+        in:
+            - state: {deter, stoch}
+            - tokens: (B, token_dim)
+            - action: (B, action_dim)
+            - reset: (B, )
+
+        return:
+            - next_state: {deter, stoch}
+            - output: {deter: (B, h_dim), stoch: (B, stoch, classes), logits: (B, stoch, classes)}
         """
         
         mask = (~reset).float().unsqueeze(-1)   # (B, 1)
@@ -234,8 +242,14 @@ class RSSM(nn.Module):
         """
         整段序列的 posterior rollout
 
-        return: (final_state, outputs)
-            outputs = {'deter': (B,T,h_dim), 'stoch': (B,T,stoch,classes), 'logit': (B,T,stoch,classes)}
+        in:
+            - tokens: (B, T, token_dim)
+            - action: (B, T, action_dim)
+            - reset:  (B, T)
+
+        return:
+            - final_state: {deter, stoch}
+            - outputs: {deter: (B, T, h_dim), stoch: (B, T, stoch, classes), logit: (B, T, stoch, classes)}
         """
         
         if state is None:
@@ -249,10 +263,6 @@ class RSSM(nn.Module):
         outputs = {k: torch.stack([o[k] for o in outputs], dim=1) for k in outputs[0]}
         
         return (state, outputs)
-
-    # ═══════════════════════════════════════════════
-    #  Imagine (prior, 用於 actor-critic training)
-    # ═══════════════════════════════════════════════
     
     def imagine_step(
         self,
@@ -260,9 +270,15 @@ class RSSM(nn.Module):
         action: torch.Tensor,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         """
-        單步 prior transition（不用 encoder，用 prior 預測 z）
+        單步 prior transition
 
-        return: (next_state, feat)
+        in:
+            - state: {deter, stoch}
+            - action: (B, action_dim)
+
+        return:
+            - next_state: {deter, stoch}
+            - feat: {deter: (B, h_dim), stoch: (B, stoch, classes), logit: (B, stoch, classes)}
         """
         
         h = self._core(state['deter'], state['stoch'], action)
@@ -285,9 +301,12 @@ class RSSM(nn.Module):
         """
         多步 imagination rollout
 
-        return: (feats, actions)
-            feats = {'deter': (B,H,...), 'stoch': (B,H,...), 'logit': (B,H,...)}
-            actions = (B, H, action_dim)
+        in:
+            - state: {deter, stoch}
+
+        return:
+            - feats = {deter: (B, H, ...), stoch: (B, H, ...), logit: (B, H, ...)}
+            - actions = (B, H, action_dim)
         """
         
         assert (policy is None) != (action_seq is None), \

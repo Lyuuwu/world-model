@@ -1,4 +1,4 @@
-from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import math
 
@@ -15,16 +15,9 @@ from shared.networks.cnn import CNNUpsampleStack, SpatialNorm
 from shared.networks.distributions import CategoricalDist
 from shared.networks.losses import MSE, Agg
 
-
-# ═══════════════════════════════════════════════════════════════
-#  Image Spatial Projection (BlockLinear variant)
-# ═══════════════════════════════════════════════════════════════
-
 class ImageSpatialProjection(nn.Module):
     """
     feat 的 deter/stoch 分別投影到 spatial feature map，再相加
-    
-    forward: (B, C, H, W)
     """
 
     def __init__(
@@ -80,17 +73,27 @@ class ImageSpatialProjection(nn.Module):
         x0 = self.deter_proj(deter)
         x0 = self._rearrange(x0)                    # (B, C, H, W)
         
-        x1 = self.stoch_proj(stoch)
+        x1 = self.stoch_proj(stoch)                 # (B, 2*uints)
         x1 = x1.reshape(B, C, H, W)                 # (B, C, H, W)
         
         out = self.merge_act(self.merge_norm(x0 + x1))
         
         return out
+    
+    if TYPE_CHECKING:
+        def __call__(
+            self,
+            deter: torch.Tensor,
+            stoch: torch.Tensor) -> torch.Tensor:
+            '''
+            forward in:
+                - deter: (B, h_dim)
+                - stoch: (B, stoch_flat)
 
-
-# ═══════════════════════════════════════════════════════════════
-#  Vector Decoder Head
-# ═══════════════════════════════════════════════════════════════
+            forward out:
+                - (B, C, H, W)
+            '''
+            ...
 
 class VectorDecoderHead(nn.Module):
     """
@@ -99,8 +102,8 @@ class VectorDecoderHead(nn.Module):
 
     def __init__(
         self,
-        feat_dim: int,          # input feature dim = h_dim + stoch*classes
-        obs_space: dict[str, ObsSpec],   # 只包含 vector keys
+        feat_dim: int,
+        obs_space: dict[str, ObsSpec],
         units: int = 1024,
         layers: int = 3,
         norm: str = 'rms',
@@ -108,6 +111,11 @@ class VectorDecoderHead(nn.Module):
         symlog: bool = True,
         outscale: float = 1.0,
     ):
+        '''
+        feat_dim = h_dim + stoch * classes
+
+        obs_space 只包含 vector keys
+        '''
         super().__init__()
         
         self._symlog = symlog
@@ -132,22 +140,31 @@ class VectorDecoderHead(nn.Module):
     def forward(self, feat: torch.Tensor) -> dict[str, torch.Tensor]:    
         hidden = self.mlp(feat)    
         return {key: head(hidden) for key, head in self.heads.items()}
-
-
-# ═══════════════════════════════════════════════════════════════
-#  Image Decoder Head  
-# ═══════════════════════════════════════════════════════════════
+    
+    if TYPE_CHECKING:
+        def __call__(
+            self,
+            feat: torch.Tensor
+        ) -> dict[str, torch.Tensor]:
+            '''
+            forward in:
+                - feat: (B, feat_dim)
+            
+            forward out:
+                - {key: (B, units)}
+            '''
+            ...
 
 class ImageDecoderHead(nn.Module):
     """
-    feat → ImageSpatialProjection → CNN upsample → sigmoid → MSE per pixel
+    feat > ImageSpatialProjection > CNN upsample > sigmoid > MSE per pixel
     """
 
     def __init__(
         self,
         h_dim: int,
         stoch_flat: int,
-        obs_space: dict[str, ObsSpec],   # 只包含 image keys
+        obs_space: dict[str, ObsSpec],
         img_size: tuple[int, int] = (64, 64),
         depth: int = 64,
         mults: tuple[int, ...] = (2, 3, 4, 4),
@@ -159,6 +176,9 @@ class ImageDecoderHead(nn.Module):
         act: str = 'silu',
         outscale: float = 1.0,
     ):
+        '''
+        obs_sapce 只包含 image keys
+        '''
         super().__init__()
     
         n_stages = len(mults)
@@ -206,6 +226,22 @@ class ImageDecoderHead(nn.Module):
         splits = torch.split(x, ch_list, dim=1)
         
         return {key: img for (key, _), img in zip(self._img_channels.items(), splits)}
+    
+    if TYPE_CHECKING:
+        def __call__(
+            self,
+            deter: torch.Tensor,
+            sstoch: torch.Tensor
+        ) -> dict[str, torch.Tensor]:
+            '''
+            forward in:
+                - deter: (B, h_dim)
+                - stoch: (B, stoch_flat)
+
+            forward out:
+                - {key: (B, C, H, W)}
+            '''
+            ...
 
 # ═══════════════════════════════════════════════════════════════
 #  DreamerDecoder: 組裝 Image + Vector paths
@@ -315,3 +351,19 @@ class DreamerDecoder(nn.Module):
                     recons[key] = Agg(MSE(raw, squash), agg_dims=len(info['shape']))
                                 
         return recons
+
+    if TYPE_CHECKING:
+        def __call__(
+            self,
+            feat: torch.Tensor | dict[str, torch.Tensor],
+            bdims: int = 2,
+        ) -> dict[str, Agg]:
+            '''
+            forward in:
+                - feat: (B, T, feat_dim) | {deter, stoch}
+            
+            forward out:
+                - {key: Agg(Categorical | MSE), agg_dims = len(shape)}
+                (discrete: Categorical | continuous: MSE)
+            '''
+            ...

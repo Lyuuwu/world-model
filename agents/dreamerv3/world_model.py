@@ -1,14 +1,11 @@
-from typing import Callable, NamedTuple
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
-import numpy as np
 
 from shared.obs_spec import ObsSpec
-from shared.math_utils import symlog, symexp
 from shared.networks.mlp import MLP, LinearHead, MLPHead
 from shared.networks.distributions import BinaryDist, TwoHotCategorical, build_symexp_bins
-from shared.networks.losses import MSE, Agg
 from shared.registry import register
 
 from .types import WorldModelOutputs, ImaginedTrajectory
@@ -35,16 +32,21 @@ class RewardHead(nn.Module):
         self.head = LinearHead(units, bins, outscale)
         self.register_buffer('_bins', build_symexp_bins(), persistent=False)
         
-    def forward(self, feat: torch.Tensor) -> TwoHotCategorical:
-        '''
-        feat: (..., feat_dim)
-        
-        return: TwoHot Dist
-        '''
-        
+    def forward(self, feat: torch.Tensor) -> TwoHotCategorical:        
         x = self.head(self.mlp(feat))
         bins = self._bins.to(x.device)
         return TwoHotCategorical(x, bins)
+    
+    if TYPE_CHECKING:
+        def __call__(self, feat: torch.Tensor) -> TwoHotCategorical:
+            '''
+            forward in:
+                - feat: (..., feat_dim)
+            
+            return:
+                - TwoHot Dist
+            '''
+            ...
     
 class ContinueHead(nn.Module):
     ''' feat > MLP > Bernoulli '''
@@ -66,6 +68,17 @@ class ContinueHead(nn.Module):
     def forward(self, feat: torch.Tensor) -> BinaryDist:
         logit = self.head(self.mlp(feat)).squeeze(-1)
         return BinaryDist(logit)
+    
+    if TYPE_CHECKING:
+        def __call__(self, feat: torch.Tensor) -> BinaryDist:
+            '''
+            forward in:
+                - feat: (..., feat_dim)
+            
+            return:
+                - BinaryDist
+            '''
+            ...
     
 @register('world_model', 'dreamerv3')
 class DreamerWorldModel(nn.Module):
