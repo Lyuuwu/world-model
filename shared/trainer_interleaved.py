@@ -41,9 +41,10 @@ class InterleavedTrainer(TrainerBase):
         print(f'[Train] Starting interleaved loop: {total_steps} env steps')
  
         step = 0
+        tokens_per_grad_step = batch_size * seq_len
+        train_credit = 0.0
         while step < total_steps:
             #  --- Phase 1: Collect ---
- 
             obs_list, agent_state, prev_action, _ = self.collect_step(
                 obs_list, agent_state, prev_action,
             )
@@ -61,11 +62,12 @@ class InterleavedTrainer(TrainerBase):
             step += self.num_envs
  
             #  --- Phase 2: Train ---
- 
             if self.buffer.total_steps >= seed_steps:
-                for _ in range(train_ratio):
+                train_credit += train_ratio * self.num_envs
+                while train_credit >= tokens_per_grad_step:
                     batch = self.buffer.sample(batch_size, seq_len)
                     metrics = self.agent.train_step(batch)
+                    train_credit -= tokens_per_grad_step
  
                     # 累計 metrics 做 smoothing
                     for k, v in metrics.items():
@@ -75,7 +77,6 @@ class InterleavedTrainer(TrainerBase):
                             train_metrics_acc.setdefault(k, []).append(v.item())
  
             #  --- Phase 3: Log ---
- 
             if step % log_every < self.num_envs and train_metrics_acc:
                 averaged = {
                     k: sum(v) / len(v) for k, v in train_metrics_acc.items()
@@ -91,14 +92,12 @@ class InterleavedTrainer(TrainerBase):
                 train_metrics_acc.clear()
  
             #  --- Phase 4: Eval ---
- 
             if step % eval_every < self.num_envs:
                 eval_n = config.get('eval_episodes', 10)
                 eval_metrics = self._eval_episodes(eval_n)
                 self.logger.log_print(eval_metrics, self._global_env_step, prefix='eval')
  
             #  --- Phase 5: Checkpoint ---
- 
             if step % checkpoint_every < self.num_envs:
                 self._save_checkpoint(tag=self._global_env_step)
  

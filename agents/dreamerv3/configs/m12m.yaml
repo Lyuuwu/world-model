@@ -1,8 +1,8 @@
 trainer: interleaved
 total_env_steps: 100000
 seed_steps: 1024
-batch_size: 32
-seq_len: 16
+batch_size: 16
+seq_len: 64
 train_ratio: 256
 
 buffer_capacity: 1000000
@@ -12,7 +12,7 @@ obs_key: image
 
 lr: 4.0e-5
 beta1: 0.9
-beta2: 0.99
+beta2: 0.999
 eps: 1.0e-20
 agc: 0.3
 
@@ -21,35 +21,34 @@ horizon: 333
 contdisc: true
 
 wm_kwargs:
-  # d = 512
-  h_dim: 2048               # 4d
+  h_dim: 2048
   stoch: 32
-  classes: 32               # d/16
+  classes: 16
   rssm_blocks: 8
-  rssm_hidden: 1024         # 2d
-  enc_depth: 32             # d/16
+  rssm_hidden: 256
+  enc_depth: 16
   enc_mults: [2, 3, 4, 4]
   enc_kernel: 5
   img_size: [64, 64]
-  dec_depth: 32
+  dec_depth: 16
   dec_mults: [2, 3, 4, 4]
   dec_kernel: 5
-  units: 512
-  head_layers: 5
+  units: 256
+  head_layers: 1
   reward_bins: 255
   dyn_scale: 1.0
   rep_scale: 0.1
   free_nats: 1.0
-  reward_grad: false
+  reward_grad: true
   norm: rms
   act: silu
   outscale: 1.0
 
 ac_kwargs:
-  policy_layers: 5
-  value_layers: 5
-  policy_units: 512
-  value_units: 512
+  policy_layers: 3
+  value_layers: 3
+  policy_units: 256
+  value_units: 256
   imag_horizon: 15
   gamma: 0.997
   lambda_: 0.95
@@ -65,4 +64,4 @@ loss_scales:
   con: 1.0
   policy: 1.0
   value: 1.0
-  repval: 0.0
+  repval: 0.3
