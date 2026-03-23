@@ -207,7 +207,6 @@ class DreamerWorldModel(nn.Module):
         )
         
         # --- TEMP ---
-        # FIX LATER
         self._loss_scales = {
             'dyn': dyn_scale,
             'rep': rep_scale,
@@ -230,7 +229,6 @@ class DreamerWorldModel(nn.Module):
             value = obs[key]
             
             if space.is_image:
-                # FIX: 看之後 wrapper
                 targets[key] = value.float() / 255.0
             else:
                 targets[key] = value
@@ -261,6 +259,11 @@ class DreamerWorldModel(nn.Module):
         state: dict[str, torch.Tensor] | None=None
     ) -> WorldModelOutputs:
         '''
+        params:
+            - action: (B, T, action_dim)
+            - reset: (B, T, )
+            - state: {deter, stoch} 
+
         1. Encoder: obs > tokens (B, T, token_dim)
         2. RSSM observe: tokens + actions > state sequence
         3. feat extraction

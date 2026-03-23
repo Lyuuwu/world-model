@@ -156,7 +156,7 @@ class TwoHotCategorical(Dist):
     def __init__(self, logits: torch.Tensor, bins: torch.Tensor | None = None):
         '''
         logits: (..., num_bins)  raw logits \\
-        bins:   (num_bins,) bin 位置，None 時自動用 build_symexp_bins()
+        bins:   (num_bins,) bin 位置, None 時自動用 build_symexp_bins()
         '''
         self._logits = logits
 

@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 
 import torch
 import torch.nn as nn
@@ -86,11 +86,23 @@ class PolicyHead(nn.Module):
             ).entropy()
             
             return Agg(dist, agg_dims=1)
+        
+    if TYPE_CHECKING:
+        def __call__(self,  feat: torch.Tensor) -> StraightThroughCategorical | Agg:
+            '''
+            forward in:
+                - feat (..., feat_dim)
+            
+            forward out:
+                - discrete: STC
+                - continuous: Agg(Normal)
+            '''
+            ...
             
     def sample(self, feat: torch.Tensor) -> torch.Tensor:        
         dist = self.forward(feat)    
         return dist.sample()
-    
+
 class ValueHead(nn.Module):
     '''
     feat > twohot dist
@@ -109,12 +121,23 @@ class ValueHead(nn.Module):
         super().__init__()
         self.mlp = MLP(feat_dim, units, layers, norm, act)
         self.head = LinearHead(units, bins, outscale)
-        self._bins = build_symexp_bins(bins)
+        self.register_buffer('_bins', build_symexp_bins(bins), persistent=False)
         
     def forward(self, feat: torch.Tensor):
         x = self.head(self.mlp(feat))
         bins = self._bins.to(x.device)
         return TwoHotCategorical(x, bins)
+    
+    if TYPE_CHECKING:
+        def __call__(self, feat: torch.Tensor):
+            '''
+            forward in:
+                - feat: (..., feat_dim)
+
+            forward out:
+                - TwoHot
+            '''
+            ...
     
 class SlowValueTarget(nn.Module):
     '''
@@ -137,24 +160,16 @@ class SlowValueTarget(nn.Module):
     def forward(self, feat: torch.Tensor) -> TwoHotCategorical:
         return self.target(feat)
     
-# def lambda_return(
-#     rew: torch.Tensor,
-#     val: torch.Tensor,
-#     cont: torch.Tensor,
-#     disc: float,
-#     lam: float=0.95
-# ) -> torch.Tensor:
-#     bootstrap = val[:, -1]
-#     live = cont[:, 1:] * disc
-#     lam_w = lam
-#     interm = rew[:, 1:] + (1 - lam_w) * live * val[:, 1:]
-    
-#     rets = [bootstrap]
-#     for t in reversed(range(live.shape[1])):
-#         rets.append(interm[:, t] + live[:, t] * lam_w * rets[-1])
-        
-#     rets = list(reversed(rets))[:-1]
-#     return torch.stack(rets, dim=1)
+    if TYPE_CHECKING:
+        def __call__(self, feat: torch.Tensor) -> TwoHotCategorical:
+            '''
+            forward in:
+                - (..., feat_dim)
+
+            forward out:
+                - TwoHot
+            '''
+            ...
 
 def lambda_return(
     last: torch.Tensor,
@@ -261,6 +276,18 @@ class DreamerActorCritic(nn.Module):
     def forward(self, feat: torch.Tensor) -> torch.Tensor:
         return self.policy_head(feat).sample()
     
+    if TYPE_CHECKING:
+        def __call__(self, feat: torch.Tensor) -> torch.Tensor:
+            '''
+            根據 policy 與 feature 來決定 action
+
+            forward in:
+                - feat: (..., feat_dim)
+
+            forward out:
+                - action (..., )
+            '''
+
     def get_policy_fn(self) -> Callable[[torch.Tensor], torch.Tensor]:
         def policy_fn(feat: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():

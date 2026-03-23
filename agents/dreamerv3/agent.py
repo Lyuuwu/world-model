@@ -102,7 +102,7 @@ class DreamerV3Agent(nn.Module):
         batch_size: int,
         device: torch.device = torch.device('cpu')
     ):
-        # one-hot action → 全零 (no action selected)
+        # one-hot action > 全零 (no action selected)
         return torch.zeros(batch_size, self.action_dim, device=device)
     
     @torch.no_grad()
@@ -136,7 +136,7 @@ class DreamerV3Agent(nn.Module):
         data: dict[str, torch.Tensor]
     ) -> dict[str, torch.Tensor]:
         
-        # --- 建構 prevact ---
+        # --- 建構 obs & prevact ---
         obs = {k: data[k] for k in self.obs_space if k in data}
         obs['reward'] = data['reward']
         obs['is_first'] = data['is_first']
