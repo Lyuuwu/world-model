@@ -9,4 +9,4 @@ version = "0.1.0"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["shared*", "agents*", "envs*", "evaluation*"]
+include = ["shared*", "agents*", "envs*", "evaluation*", "scripts"]

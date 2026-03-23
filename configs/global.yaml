@@ -5,7 +5,7 @@ device: auto                  # 'auto' → cuda if available, else cpu
 log_dir: runs/
 use_wandb: false
 wandb_project: world-model-rl
-log_every: 1000               # env steps between console/tensorboard logs
+log_every: 100               # env steps between console/tensorboard logs
  
 # --- Evaluation ---
 eval_every: 10000             # env steps between eval runs

@@ -1,14 +1,9 @@
-# ============================================================
-# agents/dreamerv3/configs/m50m.yaml  ── 論文 M / 50M 規格
-# d=512，8GB 邊界配置（batch=8, seq=32）
-# 注意：imagination rollout 是 VRAM 第二殺手，imag_horizon 保守設 12
-# ============================================================
 trainer: interleaved
 total_env_steps: 100000
 seed_steps: 1024
 batch_size: 16
 seq_len: 32
-train_ratio: 1
+train_ratio: 32
 
 buffer_capacity: 1000000
 min_episode_len: 2

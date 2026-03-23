@@ -34,6 +34,7 @@ class DreamerV3Agent(nn.Module):
             contdisc=config.contdisc,
             **wm_kwargs
         )
+        self.world_model = torch.compile(self.world_model, mode='reduce-overhead')
         
         # --- actor-critic ---
         ac_kwargs = config.ac_kwargs or {}
