@@ -1,8 +1,8 @@
 trainer: interleaved
 total_env_steps: 100000
 seed_steps: 1024
-batch_size: 16
-seq_len: 32
+batch_size: 32
+seq_len: 16
 train_ratio: 32
 
 buffer_capacity: 1000000
@@ -50,7 +50,7 @@ ac_kwargs:
   value_layers: 5
   policy_units: 512
   value_units: 512
-  imag_horizon: 12
+  imag_horizon: 15
   gamma: 0.997
   lambda_: 0.95
   entropy_scale: 3.0e-4

@@ -34,7 +34,7 @@ class DreamerV3Agent(nn.Module):
             contdisc=config.contdisc,
             **wm_kwargs
         )
-        self.world_model = torch.compile(self.world_model, mode='reduce-overhead')
+        self.world_model = torch.compile(self.world_model, mode='reduce-overhead', fullgraph=True)
         
         # --- actor-critic ---
         ac_kwargs = config.ac_kwargs or {}
@@ -50,15 +50,6 @@ class DreamerV3Agent(nn.Module):
         # --- loss scale ---
         
         self.scales = self._build_loss_scales(config, obs_space)
-        
-        # --- optimizer ---
-        
-        # self.optimizer = torch.optim.Adam(
-        #     self.parameters(),
-        #     lr=config.lr,
-        #     betas=(config.beta1, config.beta2),
-        #     eps=config.eps
-        # )
         
         self.optimizer = LaProp(
             self.parameters(),
@@ -134,7 +125,8 @@ class DreamerV3Agent(nn.Module):
     
     def train_step(
         self,
-        data: dict[str, torch.Tensor]
+        data: dict[str, torch.Tensor],
+        device: torch.device='cuda'
     ) -> dict[str, torch.Tensor]:
         
         # --- 建構 obs & prevact ---
@@ -148,12 +140,12 @@ class DreamerV3Agent(nn.Module):
         prevact = self._make_prevact(action)    # (B, T, action_dim)
         
         # --- forward ---
-        total_loss, losses, metrics = self._compute_loss(obs, prevact)
+        with torch.autocast(device_type=device, dtype=torch.bfloat16):
+            total_loss, losses, metrics = self._compute_loss(obs, prevact)
         
         # --- backward + optimizer step ---
         self.optimizer.zero_grad()
         total_loss.backward()
-            
         self.optimizer.step()
         
         # --- 更新 EMA ---
