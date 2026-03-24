@@ -49,7 +49,9 @@ class JSONLLogger:
             s = _to_scalar(v)
             if s is not None:
                 parts.append(f'{k}={s:.4f}' if isinstance(s, float) else f'{k}={s}')
+        print('==================================================')
         print(' | '.join(parts))
+        print('==================================================')
         
     def save_config(self, config_dict: dict) -> None:
         path = self._log_dir / 'config.json'

@@ -1,6 +1,7 @@
 import sys
 import argparse
 from pathlib import Path
+from datetime import datetime
 
 import torch
 
@@ -137,7 +138,8 @@ def bootstrap(config, device: torch.device) -> dict:
     )
 
     # 6. Logger
-    run_name = f'{agent_name}_{task}_s{seed}'
+    time = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+    run_name = f'{agent_name}_{task}_s{seed}_{time}'
     log_dir = Path(config.get('log_dir', 'runs')) / run_name
     logger = JSONLLogger(str(log_dir))
     logger.save_config(config.to_dict())
@@ -209,6 +211,11 @@ def main():
     print(f'  Device:  {device}')
     print(f'  Compute: {config.get("compute_dtype", "bfloat16")}')
     print('=' * 60)
+
+    import json
+    print('[Config] Effective config:')
+    print(json.dumps(config.to_dict(), indent=2, default=str)[:2000])
+    print('...')
 
     # Bootstrap + Run
     components = bootstrap(config, device)

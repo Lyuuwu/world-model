@@ -91,7 +91,8 @@ class Normalizer(nn.Module):
         use_percentile: bool=False,
         percentile_low: float=5.0,
         percentile_high: float=95.0,
-        max_limit: float=1.0
+        max_limit: float=1.0,
+        enable: bool=True
     ):
         super().__init__()
         
@@ -101,6 +102,7 @@ class Normalizer(nn.Module):
         self.percentile_low = percentile_low
         self.percentile_high = percentile_high
         self.max_limit = max_limit
+        self.enable = enable
         
         self.register_buffer('_offset', torch.zeros(1))
         self.register_buffer('_scale', torch.ones(1))
@@ -113,6 +115,9 @@ class Normalizer(nn.Module):
         
         return (offset, scale)
         '''
+        
+        if not self.enable:
+            return (0, 1)
         
         if self.use_percentile:
             low = torch.quantile(data.float(), self.percentile_low / 100)

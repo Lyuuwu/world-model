@@ -85,6 +85,7 @@ ac_kwargs:
   act: silu
  
   # Policy
+  policy_outscale: 0.01
   policy_unimix: 0.01
   actent: 3.0e-4
   minstd: 0.1
@@ -106,6 +107,8 @@ ac_kwargs:
   retnorm_phigh: 95.0
   valnorm_decay: 0.99
   advnorm_decay: 0.99
+  valnorm_enable: false
+  advnorm_enable: false
  
 loss_scales:
   dyn: 1.0

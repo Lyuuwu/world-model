@@ -33,7 +33,7 @@ class PolicyHead(nn.Module):
         layers: int=5,
         norm: str='rms',
         act: str='silu',
-        outscale: float=1.0,
+        outscale: float=0.01,
         unimix: float=0.01,
         minstd: float=0.1,
         maxstd: float=1.0
@@ -204,6 +204,7 @@ class DreamerActorCritic(nn.Module):
         act: str='silu',
         
         # --- policy ---
+        policy_outscale: float = 1.0,
         policy_unimix: float=0.01,
         actent: float=3e-4,
         
@@ -228,6 +229,8 @@ class DreamerActorCritic(nn.Module):
         retnorm_phigh: float=95.0,
         valnorm_decay: float=0.99,
         advnorm_decay: float=0.99,
+        valnorm_enable: bool=False,
+        advnorm_enable: bool=False,
         
         # --- loss scales ---
         policy_scale: float=1.0,
@@ -252,7 +255,7 @@ class DreamerActorCritic(nn.Module):
         self.policy_head = PolicyHead(
             feat_dim, action_dim, discrete,
             units, layers, norm, act,
-            unimix=policy_unimix, minstd=minstd, maxstd=maxstd
+            unimix=policy_unimix, minstd=minstd, maxstd=maxstd, outscale=policy_outscale
         )
         
         self.value_head = ValueHead(
