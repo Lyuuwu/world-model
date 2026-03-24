@@ -40,11 +40,10 @@ log_dir: runs
  
 # --- Compute ---
 compute_dtype: bfloat16
-use_compile: false
+use_compile: true
 compile_mode: reduce-overhead
  
 wm_kwargs:
-  # RSSM (JAX: agent.dyn.rssm)
   h_dim: 8192
   stoch: 32
   classes: 64
