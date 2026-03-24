@@ -181,7 +181,7 @@ class DreamerV3Agent(nn.Module):
  
         return metrics
  
-    # ── Core loss computation ──────────────────────────────
+    # --- Core loss computation ---
  
     def _compute_loss(
         self,
