@@ -349,7 +349,7 @@ class TimeLimitWrapper(gym.Wrapper):
             
         return obs, rew, term, trun, info
     
-class SyncVectorEnvWrapper:
+class SyncVectorEnvWrapper(gym.Wrapper):
     ''' 管理多個 evn instance 的平行收集 '''
     
     def __init__(self, env_fns: list):

@@ -1,72 +1,10 @@
-# ============================================================
-# agents/dreamerv3/configs/s25m.yaml  ── 論文 S+ / 25M 規格
-# d=384，batch/seq 略減以確保 8GB 安全
-# ============================================================
-trainer: interleaved
-total_env_steps: 100000
-seed_steps: 1024
-batch_size: 12              # 略減（原 16），避免 OOM 邊界
-seq_len: 64
-train_ratio: 1
-
-buffer_capacity: 1000000
-min_episode_len: 2
-num_envs: 1
-obs_key: image
-
-lr: 4.0e-5
-beta1: 0.9
-beta2: 0.99
-eps: 1.0e-20
-agc: 0.3
-
-discrete: true
-horizon: 333
-contdisc: true
-
 wm_kwargs:
-  # d = 384
-  h_dim: 1536               # 4d
-  stoch: 32
-  classes: 24               # d/16
-  rssm_blocks: 8
-  rssm_hidden: 768          # 2d
-  enc_depth: 24             # d/16
-  enc_mults: [2, 3, 4, 4]
-  enc_kernel: 5
-  img_size: [64, 64]
-  dec_depth: 24
-  dec_mults: [2, 3, 4, 4]
-  dec_kernel: 5
-  units: 384
-  head_layers: 5
-  reward_bins: 255
-  dyn_scale: 1.0
-  rep_scale: 0.1
-  free_nats: 1.0
-  reward_grad: false
-  norm: rms
-  act: silu
-  outscale: 1.0
-
+  h_dim: 3072                 # 8d
+  rssm_hidden: 384             # d
+  classes: 24                  # d/16
+  enc_depth: 24                # d/16
+  dec_depth: 24                # d/16
+  units: 384                   # d
+ 
 ac_kwargs:
-  policy_layers: 5
-  value_layers: 5
-  policy_units: 384
-  value_units: 384
-  imag_horizon: 15
-  gamma: 0.997
-  lambda_: 0.95
-  entropy_scale: 3.0e-4
-  slow_target_fraction: 0.02
-  slow_target_update: 1
-
-loss_scales:
-  dyn: 1.0
-  rep: 0.1
-  rec: 1.0
-  rew: 1.0
-  con: 1.0
-  policy: 1.0
-  value: 1.0
-  repval: 0.0
+  units: 384                   # d

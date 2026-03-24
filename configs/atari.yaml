@@ -1,13 +1,13 @@
-total_env_steps: 100000       # 100K agent steps (400K env frames with action_repeat=4)
+total_env_steps: 100000
  
 # --- Environment wrappers (forwarded to make_atari) ---
 env:
   action_repeat: 4
-  max_noop: 0                 # DreamerV3 不用 noop (Table 10)
-  sticky_prob: 0.0            # DreamerV3 不用 sticky actions
+  max_noop: 0
+  sticky_prob: 0.0
   fire_reset: false
-  life_loss_terminal: false   # DreamerV3 不用 life info (Table 10)
-  reward_clip: null            # DreamerV3 用 symlog, 不 clip reward
+  life_loss_terminal: false
+  reward_clip: null
   reward_scale: 1.0
   grayscale: true
   resize: [64, 64]

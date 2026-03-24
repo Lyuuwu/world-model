@@ -1,17 +1,13 @@
 seed: 0
-device: auto                  # 'auto' → cuda if available, else cpu
+device: auto
  
 # --- Logging ---
-log_dir: runs/
-use_wandb: false
-wandb_project: world-model-rl
-log_every: 1000               # env steps between console/tensorboard logs
- 
-# --- Evaluation ---
-eval_every: 10000             # env steps between eval runs
+log_dir: runs
+log_every: 1000
+eval_every: 10000
 eval_episodes: 10
- 
-# --- Checkpoint ---
 checkpoint_every: 25000
-checkpoint_dir: checkpoints/
-resume: null                  # path to checkpoint dir for resume, or null
+ 
+# --- Compute ---
+compute_dtype: bfloat16
+use_compile: false

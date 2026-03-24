@@ -1,133 +1,33 @@
+import os
 import random
-import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
- 
+
 import numpy as np
 import torch
- 
+import torch.nn as nn
+
+from shared.logger import JSONLLogger
 from shared.config import Config
 
-def stack_dict_list(
-    dict_list: list[dict[str, np.ndarray]],
-    device: torch.device = torch.device('cpu'),
-) -> dict[str, torch.Tensor]:
-    '''
-    list of dict obs > batched dict of tensors
-    
-    [{key: (H,W,C)}, ...] > {key: (B, H, W, C)}
- 
-    image 保持 uint8
-          
-    scalar (reward, is_first, ...) 轉 float32 or bool
-    '''
-    keys = dict_list[0].keys()
-    result = {}
-    for k in keys:
-        vals = [d[k] for d in dict_list]
-        stacked = np.stack(vals, axis=0)
-        if stacked.dtype == np.bool_:
-            result[k] = torch.from_numpy(stacked).to(device)
-        elif stacked.dtype == np.uint8:
-            result[k] = torch.from_numpy(stacked).to(device)
-        else:
-            result[k] = torch.from_numpy(stacked).to(dtype=torch.float32, device=device)
-    return result
-
-def seed_everything(seed: int):
+def seed_everything(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-        
-class SimpleLogger:
-    '''
-    最小 logger: console print + optional TensorBoard
-    '''
- 
-    def __init__(self, log_dir: str, use_tb: bool = True):
-        self._log_dir = Path(log_dir)
-        self._log_dir.mkdir(parents=True, exist_ok=True)
-        self._writer = None
-        if use_tb:
-            try:
-                from torch.utils.tensorboard import SummaryWriter
-                self._writer = SummaryWriter(str(self._log_dir))
-            except ImportError:
-                print('[Logger] tensorboard not installed, falling back to console only')
-        
-        self._jsonl_path = self._log_dir / 'metrics.jsonl'
-        self._jsonl_file = open(self._jsonl_path, 'a', buffering=1, encoding='utf-8')
- 
-    def log(self, metrics: dict[str, float], step: int, prefix: str = ''):
-        '''
-        寫入 TensorBoard + JSONL
-        '''
-        record: dict[str, Any] = {'step': step}
- 
-        for k, v in metrics.items():
-            tag = f'{prefix}/{k}' if prefix else k
- 
-            # TensorBoard
-            if self._writer:
-                scalar = self._to_scalar(v)
-                if scalar is not None:
-                    self._writer.add_scalar(tag, scalar, step)
- 
-            # JSONL: 只寫數值型
-            scalar = self._to_scalar(v)
-            if scalar is not None:
-                record[tag] = scalar
- 
-        # step 之外至少有一個數值才寫行，避免空行污染
-        if len(record) > 1:
-            self._jsonl_file.write(json.dumps(record) + '\n')
- 
-    def log_print(self, metrics: dict[str, float], step: int, prefix: str = ''):
-        self.log(metrics, step, prefix)
-        parts = [f'{prefix} step={step}'] if prefix else [f'step={step}']
-        for k, v in metrics.items():
-            if isinstance(v, float):
-                parts.append(f'{k}={v:.4f}')
-            else:
-                parts.append(f'{k}={v}')
-        print(' | '.join(parts))
- 
-    def close(self):
-        if self._writer:
-            self._writer.close()
-
-    @staticmethod
-    def _to_scalar(v: Any) -> float | None:
-        '''任意值轉 Python float, 無法轉回傳 None。'''
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, torch.Tensor) and v.numel() == 1:
-            return v.item()
-        if isinstance(v, np.ndarray) and v.size == 1:
-            return float(v.flat[0])
-        return None
+    torch.cuda.manual_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
     
-    @property
-    def jsonl_path(self) -> Path:
-        return self._jsonl_path
-            
 class TrainerBase(ABC):
-    '''
-    run() → _setup() → _prefill() → _main_loop() → _final_eval()
-    '''
- 
     def __init__(
         self,
-        agent: torch.nn.Module,
-        vec_env: Any,                   # SyncVectorEnvWrapper
-        eval_env: Any,                  # single gym.Env (wrapped)
-        buffer: Any,                    # EpisodeReplayBuffer
-        logger: SimpleLogger,
+        agent: nn.Module,
+        vec_env: Any,
+        eval_env: Any,
+        buffer: Any,
+        logger: JSONLLogger,
         config: Config,
-        device: torch.device,
+        device: torch.device
     ):
         self.agent = agent
         self.vec_env = vec_env
@@ -136,175 +36,149 @@ class TrainerBase(ABC):
         self.logger = logger
         self.config = config
         self.device = device
- 
+        
         self.num_envs = vec_env.num_envs
-        self._global_env_step = 0       # 追蹤 total env steps (across resume)
- 
-    # --- Template method ---
- 
-    def run(self):
-        ''' 完整 training 流程 '''
+        self._global_env_step = 0
+        self._num_actions = self._infer_num_actions()
+        
+    def _infer_num_actions(self) -> int:
+        space = self.eval_env.action_space
+        if hasattr(space, 'n'):
+            return space.n
+        return space.shape[0]
+    
+    def run(self) -> None:
         self._setup()
         self._prefill()
         self._main_loop()
         self._final_eval()
         self._save_checkpoint(tag='final')
         self.logger.close()
- 
+    
     @abstractmethod
-    def _main_loop(self):
-        raise NotImplementedError
- 
-    # --- Setup / Resume ---
- 
-    def _setup(self):
-        ''' 載入 checkpoint (如果有) '''
+    def _main_loop(self) -> None:
+        return NotImplementedError
+    
+    def _setup(self) -> None:
         resume_path = self.config.get('resume', None)
         if resume_path is not None:
             self._load_checkpoint(resume_path)
-            print(f'[Trainer] Resumed from {resume_path}, env_step={self._global_env_step}')
+            print(f'[Trainer] Resumed from {resume_path}, '
+                  f'env_step={self._global_env_step}')
         else:
             print(f'[Trainer] Starting fresh training')
- 
-    # --- Prefill ---
- 
-    def _prefill(self):
-        '''
-        用 random policy 填充 buffer seed_steps
-        
-        確保第一次 train 就有足夠的 data
-        '''
+    
+    def _prefill(self) -> None:
         seed_steps = self.config.get('seed_steps', 1024)
- 
+        
         if self.buffer.total_steps >= seed_steps:
-            print(f'[Prefill] Buffer already has {self.buffer.total_steps} steps, skipping')
+            print(f'[Prefill] Buffer already has {self.buffer.total_steps} steps',
+                  f'skipping')
             return
- 
+        
         target = seed_steps - self.buffer.total_steps
-        print(f'[Prefill] Collecting {target} random steps...')
- 
+        print(f'[Prefill] Cllecting {target} random steps ...')
+        
         obs_list, _ = self.vec_env.reset()
- 
         collected = 0
+        
         while collected < target:
-            # random actions
             actions = np.array([
+                # self.vec_env.single_action_space.sample()
                 self.eval_env.unwrapped.action_space.sample()
                 for _ in range(self.num_envs)
             ])
- 
+            
             next_obs_list, rews, terms, truns, infos = self.vec_env.step(actions)
- 
+            
             for i in range(self.num_envs):
-                # 把 action 轉成 one-hot (Atari discrete)
-                action_onehot = np.zeros(
-                    self.eval_env.unwrapped.action_space.n, dtype=np.float32
-                )
-                action_onehot[actions[i]] = 1.0
- 
+                action_vec = self._action_to_vector(actions[i])
                 done = terms[i] or truns[i]
- 
+                
                 if done:
-                    # done step: 存 final obs
                     final_obs = infos[i].get('final_observation', obs_list[i])
                     self.buffer.add_step(
-                        obs=final_obs,
-                        action=action_onehot,
-                        reward=float(rews[i]),
-                        is_first=bool(obs_list[i].get('is_first', False)),
-                        is_last=True,
-                        is_terminal=bool(infos[i].get('real_terminated', terms[i])),
+                        obs = final_obs,
+                        action = action_vec,
+                        reward = float(rews[i]),
+                        is_first = bool(obs_list[i].get('is_first', False)),
+                        is_last = True,
+                        is_terminal = bool(infos[i].get('real_terminated', terms[i]))
                     )
                 else:
                     self.buffer.add_step(
-                        obs=obs_list[i],
-                        action=action_onehot,
-                        reward=float(rews[i]),
-                        is_first=bool(obs_list[i].get('is_first', False)),
-                        is_last=False,
-                        is_terminal=False,
+                        obs = obs_list[i],
+                        action = action_vec,
+                        reward = float(rews[i]),
+                        is_first = bool(obs_list[i].get('is_first', False)),
+                        is_last = False,
+                        is_terminal = False,
                     )
+                
                 collected += 1
- 
+            
             obs_list = next_obs_list
- 
+        
         print(f'[Prefill] Done. Buffer has {self.buffer.total_steps} steps')
- 
-    # --- Collect step ---
- 
+        
+    
     @torch.no_grad()
     def collect_step(
         self,
         obs_list: list[dict],
         agent_state: dict[str, torch.Tensor],
-        prev_action: torch.Tensor,
+        prev_action: torch.Tensor
     ) -> tuple[list[dict], dict[str, torch.Tensor], torch.Tensor, dict]:
-        '''
-        單步 data collection:
-          1. batch obs -> agent.policy() -> action
-          2. vec_env.step(action) -> next obs
-          3. buffer.add_step()
-          4. 回傳 (next_obs_list, new_state, action, metrics)
-        '''
-        # --- batch obs for policy ---
-        batched_obs = stack_dict_list(obs_list, self.device)
-        is_first = batched_obs['is_first']
- 
-        # --- agent policy ---
-        action, new_state = self.agent.policy(
-            obs=batched_obs,
-            state=agent_state,
-            prev_action=prev_action,
-            is_first=is_first,
+        obs_batch = self._batch_obs(obs_list)
+        is_first = torch.tensor(
+            [o.get('is_first', False) for o in obs_list],
+            dtype=torch.bool, device=self.device
         )
-        # action: (B, action_dim) tensor — one-hot for discrete
- 
-        # --- env step ---
-        # 轉成 int actions for Atari
-        action_np = action.cpu().numpy()
+        
+        action, new_state = self.agent.policy(
+            obs_batch, agent_state, prev_action, is_first
+        )
+        
         if self.config.get('discrete', True):
-            env_actions = action_np.argmax(axis=-1)  # (B,) int
+            act_np = action.argmax(dim=-1).cpu().numpy()
         else:
-            env_actions = action_np
- 
-        next_obs_list, rews, terms, truns, infos = self.vec_env.step(env_actions)
- 
-        # --- store transitions ---
+            act_np = action.cpu().numpy()
+        
+        next_obs_list, rews, terms, truns, infos = self.vec_env.step(act_np)
+        
         for i in range(self.num_envs):
+            action_vec = action[i].cpu().numpy()
             done = terms[i] or truns[i]
+            
             if done:
-                final_obs = infos[i].get('final_observation', next_obs_list[i])
+                final_obs = infos[i].get('final_observation', obs_list[i])
                 self.buffer.add_step(
-                    obs=final_obs,
-                    action=action_np[i],
-                    reward=float(rews[i]),
-                    is_first=bool(obs_list[i].get('is_first', False)),
-                    is_last=True,
-                    is_terminal=bool(infos[i].get('real_terminated', terms[i])),
+                    obs = final_obs,
+                    action = action_vec,
+                    reward = float(rews[i]),
+                    is_first = bool(obs_list[i].get('is_first', False)),
+                    is_last = True,
+                    is_terminal = bool(
+                        infos[i].get('read_terminated', terms[i])
+                    )
                 )
             else:
                 self.buffer.add_step(
-                    obs=obs_list[i],
-                    action=action_np[i],
-                    reward=float(rews[i]),
-                    is_first=bool(obs_list[i].get('is_first', False)),
-                    is_last=False,
-                    is_terminal=False,
+                    obs = obs_list[i],
+                    action = action_vec,
+                    reward = float(rews[i]),
+                    is_first = bool(obs_list[i].get('is_first', False)),
+                    is_last = False,
+                    is_terminal = False
                 )
- 
+            
         self._global_env_step += self.num_envs
- 
-        return next_obs_list, new_state, action, {}
- 
-    # ── Eval ─────────────────────────────────────────────
- 
-    @torch.no_grad()
-    def _eval_episodes(self, n_episodes: int) -> dict[str, float]:
-        '''
-        跑 n_episodes 個完整 eval episode，回傳 metrics
         
-        用 eval_env (single env, no auto-reset)
-        '''
+        info = {'reward': rews.tolist(), 'done': (terms | truns).tolist()}
+        
+        return next_obs_list, new_state, action, info
+    
+    def _eval_episodes(self, n_episodes: int) -> dict[str, float]:
         self.agent.eval()
         returns = []
         lengths = []
@@ -312,31 +186,28 @@ class TrainerBase(ABC):
         for _ in range(n_episodes):
             obs, _ = self.eval_env.reset()
             state = self.agent.initial_state(1, self.device)
-            prevact = self.agent.initial_prevact(1, self.device)
+            prev_act = self.agent.initial_prevact(1, self.device)
+            done = False
             ep_return = 0.0
             ep_len = 0
  
-            done = False
             while not done:
-                # 單步 obs → tensor
-                obs_t = stack_dict_list([obs], self.device)
-                is_first = obs_t['is_first']
+                obs_t = self._single_obs_to_tensor(obs)
+                is_first = torch.tensor([ep_len == 0],
+                                        dtype=torch.bool, device=self.device)
+                with torch.no_grad():
+                    action, state = self.agent.policy(
+                        obs_t, state, prev_act, is_first
+                    )
  
-                action, state = self.agent.policy(
-                    obs=obs_t, state=state,
-                    prev_action=prevact, is_first=is_first,
-                )
- 
-                action_np = action.cpu().numpy()[0]
                 if self.config.get('discrete', True):
-                    env_action = int(action_np.argmax())
+                    act_np = action.argmax(dim=-1).cpu().numpy()[0]
                 else:
-                    env_action = action_np
+                    act_np = action.cpu().numpy()[0]
  
-                obs, rew, term, trun, info = self.eval_env.step(env_action)
-                prevact = action
- 
-                ep_return += rew
+                obs, rew, term, trun, _ = self.eval_env.step(act_np)
+                prev_act = action
+                ep_return += float(rew)
                 ep_len += 1
                 done = term or trun
  
@@ -346,45 +217,69 @@ class TrainerBase(ABC):
         self.agent.train()
  
         return {
-            'eval/return_mean': float(np.mean(returns)),
-            'eval/return_std': float(np.std(returns)),
-            'eval/length_mean': float(np.mean(lengths)),
-            'eval/num_episodes': n_episodes,
+            'return_mean': float(np.mean(returns)),
+            'return_std': float(np.std(returns)),
+            'return_min': float(np.min(returns)),
+            'return_max': float(np.max(returns)),
+            'length_mean': float(np.mean(lengths)),
         }
  
-    def _final_eval(self):
+    def _final_eval(self) -> None:
         n = self.config.get('eval_episodes', 10)
-        print(f'[Final eval] Running {n} episodes...')
         metrics = self._eval_episodes(n)
         self.logger.log_print(metrics, self._global_env_step, prefix='final_eval')
- 
-    # --- Checkpoint ---
- 
-    def _save_checkpoint(self, tag: str | int = 'latest'):
-        ckpt_dir = Path(self.config.get('checkpoint_dir', 'checkpoints'))
-        run_name = f"{self.config['agent']}_{self.config['task']}_s{self.config['seed']}"
-        save_dir = ckpt_dir / run_name / str(tag)
-        save_dir.mkdir(parents=True, exist_ok=True)
+        
+    def _save_checkpoint(self, tag: str | int) -> None:
+        ckpt_dir = self.logger.log_dir / 'checkpoints'
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        path = ckpt_dir / f'ckpt_{tag}.pt'
  
         torch.save({
-            'agent': self.agent.state_dict(),
-            'env_step': self._global_env_step,
-            'rng_torch': torch.random.get_rng_state(),
-            'rng_numpy': np.random.get_state(),
-            'rng_python': random.getstate(),
-        }, save_dir / 'checkpoint.pt')
+            'agent_state_dict': self.agent.state_dict(),
+            'optimizer_state_dict': self.agent.optimizer.state_dict(),
+            'global_env_step': self._global_env_step,
+            'buffer_stats': self.buffer.stats,
+        }, path)
+        print(f'[Checkpoint] Saved → {path}')
  
-        # 存 config snapshot for reproducibility
-        import yaml
-        with open(save_dir / 'config.yaml', 'w') as f:
-            yaml.dump(self.config.to_dict(), f, default_flow_style=False)
+    def _load_checkpoint(self, path: str | Path) -> None:
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
+        self.agent.load_state_dict(ckpt['agent_state_dict'])
+        if 'optimizer_state_dict' in ckpt:
+            self.agent.optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+        self._global_env_step = ckpt.get('global_env_step', 0)
+        
+    def _action_to_vector(self, action_int: int | np.ndarray) -> np.ndarray:
+        '''把 discrete action int → one-hot vector'''
+        if self.config.get('discrete', True):
+            vec = np.zeros(self._num_actions, dtype=np.float32)
+            vec[int(action_int)] = 1.0
+            return vec
+        return np.asarray(action_int, dtype=np.float32)
  
-        print(f'[Checkpoint] Saved to {save_dir}')
+    def _batch_obs(self, obs_list: list[dict]) -> dict[str, torch.Tensor]:
+        '''list[dict] > dict[tensor(B, ...)]'''
+        keys = [k for k in obs_list[0] if k not in
+                ('is_first', 'is_last', 'is_terminal', 'reward')]
+        batch = {}
+        for k in keys:
+            arr = np.stack([o[k] for o in obs_list], axis=0)
+            if arr.dtype == np.uint8:
+                batch[k] = torch.from_numpy(arr).to(self.device)
+            else:
+                batch[k] = torch.from_numpy(arr).float().to(self.device)
+        return batch
  
-    def _load_checkpoint(self, path: str):
-        ckpt = torch.load(Path(path) / 'checkpoint.pt', map_location=self.device)
-        self.agent.load_state_dict(ckpt['agent'])
-        self._global_env_step = ckpt['env_step']
-        torch.random.set_rng_state(ckpt['rng_torch'])
-        np.random.set_state(ckpt['rng_numpy'])
-        random.setstate(ckpt['rng_python'])
+    def _single_obs_to_tensor(self, obs: dict) -> dict[str, torch.Tensor]:
+        '''single dict obs > dict[tensor(1, ...)]'''
+        result = {}
+        for k, v in obs.items():
+            if k in ('is_first', 'is_last', 'is_terminal', 'reward'):
+                continue
+            arr = np.asarray(v)
+            if arr.dtype == np.uint8:
+                result[k] = torch.from_numpy(arr).unsqueeze(0).to(self.device)
+            else:
+                result[k] = (torch.from_numpy(arr).float()
+                             .unsqueeze(0).to(self.device))
+        return result

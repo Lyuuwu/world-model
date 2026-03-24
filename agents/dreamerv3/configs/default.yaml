@@ -1,76 +1,118 @@
-# --- Training loop (InterleavedTrainer) ---
 trainer: interleaved
-total_env_steps: 100000       # Atari 100k = 100K agent steps
-seed_steps: 1024              # 用 random policy 預填 buffer
-batch_size: 16
-seq_len: 64
-train_ratio: 1                # gradient steps per env step
-
+total_env_steps: 100000
+seed_steps: 1024
+batch_size: 16                # JAX: 固定 across all sizes
+seq_len: 64                   # JAX: batch_length: 64
+train_ratio: 256              # JAX: atari100k → train_ratio: 256
+ 
 # --- Replay buffer ---
 buffer_capacity: 1000000
 min_episode_len: 2
-
+ 
 # --- Environment ---
-num_envs: 1                   # 平行收集的 env 數量
+num_envs: 1                   # JAX: atari100k → envs: 1
 obs_key: image
-
-# --- Optimizer (single optimizer, DreamerV3 style) ---
-lr: 1.0e-4
+ 
+# --- Optimizer (JAX: agent.opt, 固定 across all sizes) ---
+lr: 4.0e-5
 beta1: 0.9
 beta2: 0.999
 eps: 1.0e-20
-agc: 0.3                     # adaptive gradient clipping threshold
-
-# --- Agent architecture ---
-discrete: true                # discrete action space
-horizon: 333
-contdisc: true                # continue discount
-
-# --- World model kwargs (forwarded to DreamerWorldModel) ---
+agc: 0.3
+ 
+# --- Agent top-level ---
+discrete: true
+horizon: 333                  # JAX: agent.horizon
+contdisc: true                # JAX: agent.contdisc
+ 
+# --- Gradient flow (JAX defaults — 所有 size 共用) ---
+ac_grads: false               # JAX: agent.ac_grads
+reward_grad: true             # JAX: agent.reward_grad
+repval_loss: true             # JAX: agent.repval_loss
+ 
+# --- Logging ---
+log_every: 1000
+eval_every: 10000
+eval_episodes: 10
+checkpoint_every: 25000
+log_dir: runs
+ 
+# --- Compute ---
+compute_dtype: bfloat16
+use_compile: false
+compile_mode: reduce-overhead
+ 
 wm_kwargs:
-  h_dim: 4096
-  stoch: 32
-  classes: 32
-  rssm_blocks: 8
-  rssm_hidden: 2048
-  enc_depth: 64
-  enc_mults: [2, 3, 4, 4]
-  enc_kernel: 5
+  # RSSM (JAX: agent.dyn.rssm)
+  h_dim: 8192                 # 8d        (JAX: deter)
+  stoch: 32                   # 固定       (JAX: stoch)
+  classes: 64                  # d/16      (JAX: classes)
+  rssm_blocks: 8              # 固定       (JAX: blocks)
+  rssm_hidden: 1024            # d         (JAX: hidden)
+ 
+  # Encoder (JAX: agent.enc.simple)
+  enc_depth: 64                # d/16      (JAX: depth)
+  enc_mults: [2, 3, 4, 4]     # 固定       (JAX: mults)
+  enc_kernel: 5               # 固定       (JAX: kernel)
   img_size: [64, 64]
-  dec_depth: 64
-  dec_mults: [2, 3, 4, 4]
-  dec_kernel: 5
-  units: 1024
-  head_layers: 5
-  reward_bins: 255
+ 
+  # Decoder (JAX: agent.dec.simple)
+  dec_depth: 64                # d/16      (JAX: depth)
+  dec_mults: [2, 3, 4, 4]     # 固定       (JAX: mults)
+  dec_kernel: 5               # 固定       (JAX: kernel)
+ 
+  # MLP / Head (JAX: .*\.units → applies to all sub-modules)
+  units: 1024                  # d
+  head_layers: 1               # 固定       (JAX: rewhead.layers & conhead.layers)
+  reward_bins: 255             # 固定       (JAX: rewhead.bins)
+ 
+  # Loss (JAX: agent.dyn.rssm)
   dyn_scale: 1.0
   rep_scale: 0.1
   free_nats: 1.0
-  reward_grad: false
+ 
+  # Network config
+  norm: rms                    # rms | layer | none
+  act: silu                    # silu | gelu | relu | mish | tanh | none
+  outscale: 1.0
+ 
+ac_kwargs:
+  # Network (JAX: policy.layers/units, value.layers/units)
+  units: 1024                  # d
+  layers: 3                    # 固定       (JAX: policy.layers & value.layers)
+  bins: 255                    # 固定       (JAX: value.bins)
   norm: rms
   act: silu
-  outscale: 1.0
-
-# --- Actor-critic kwargs ---
-ac_kwargs:
-  policy_layers: 5
-  value_layers: 5
-  policy_units: 1024
-  value_units: 1024
-  imag_horizon: 15
-  gamma: 0.997
-  lambda_: 0.95
-  entropy_scale: 3.0e-4
-  slow_target_fraction: 0.02
-  slow_target_update: 1
-
-# --- Loss scales ---
+ 
+  # Policy (JAX: agent.policy)
+  policy_unimix: 0.01          # JAX: policy.unimix
+  actent: 3.0e-4               # JAX: imag_loss.actent
+  minstd: 0.1                 # JAX: policy.minstd
+  maxstd: 1.0                 # JAX: policy.maxstd
+ 
+  # Value (JAX: agent.slowvalue)
+  value_outscale: 0.0          # JAX: value.outscale
+  slow_decay: 0.98             # JAX: 1 - slowvalue.rate = 1 - 0.02
+  slowreg: 1.0                # JAX: imag_loss.slowreg
+  slowtar: false               # JAX: imag_loss.slowtar
+ 
+  # Returns (JAX: agent.imag_loss, agent.repl_loss)
+  lam: 0.95                   # JAX: imag_loss.lam
+ 
+  # Normalization (JAX: agent.retnorm, agent.valnorm, agent.advnorm)
+  retnorm_decay: 0.99          # JAX: 1 - retnorm.rate = 1 - 0.01
+  retnorm_limit: 1.0           # JAX: retnorm.limit
+  retnorm_plow: 5.0            # JAX: retnorm.perclo
+  retnorm_phigh: 95.0          # JAX: retnorm.perchi
+  valnorm_decay: 0.99          # JAX: valnorm → impl: none (disabled)
+  advnorm_decay: 0.99          # JAX: advnorm → impl: none (disabled)
+ 
 loss_scales:
   dyn: 1.0
   rep: 0.1
-  rec: 1.0
+  rec: 1.0                    # 展開到每個 obs key
   rew: 1.0
   con: 1.0
   policy: 1.0
   value: 1.0
-  repval: 0.0                # 0 = 不啟用 replay value loss
+  repval: 0.3                 # JAX default: 0.3
