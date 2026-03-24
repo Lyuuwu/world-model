@@ -237,7 +237,10 @@ class DreamerWorldModel(nn.Module):
     
     def _make_continue_target(self, obs: dict[str, torch.Tensor]) -> torch.Tensor:
         con = (~obs['is_terminal']).float()
-            
+        
+        if self.contdisc:
+            con *= 1 - 1 / self.horizon
+        
         return con
     
     def _get_feat(

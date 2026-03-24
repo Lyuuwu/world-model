@@ -255,7 +255,7 @@ class DreamerV3Agent(nn.Module):
         for k, v in losses.items():
             s = self.scales[k]
             if s > 0:
-                total = total + s * v.sum()
+                total = total + s * v.mean()
                 metrics[f'loss/{k}'] = v.mean().item()
                 metrics[f'scale/{k}'] = s
  

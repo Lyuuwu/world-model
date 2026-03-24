@@ -159,7 +159,7 @@ class TrainerBase(ABC):
                     is_first = bool(obs_list[i].get('is_first', False)),
                     is_last = True,
                     is_terminal = bool(
-                        infos[i].get('read_terminated', terms[i])
+                        infos[i].get('real_terminated', terms[i])
                     )
                 )
             else:
