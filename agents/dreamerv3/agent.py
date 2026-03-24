@@ -89,7 +89,7 @@ class DreamerV3Agent(nn.Module):
         }
         scales = dict(raw)
  
-        # rec → 每個 obs key
+        # rec -> 每個 obs key
         rec_scale = scales.pop('rec', 1.0)
         exclude = ('is_first', 'is_last', 'is_terminal', 'reward')
         for key in obs_space:
@@ -156,8 +156,6 @@ class DreamerV3Agent(nn.Module):
     ) -> dict[str, float]:
         """
         單步 training: forward + backward + optimizer step.
- 
-        [FIX-2] device_type 由 trainer 傳入，不再 hardcode 'cuda'
         """
         # build obs & prevact
         obs = {k: data[k] for k in self.obs_space if k in data}
