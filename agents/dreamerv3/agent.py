@@ -154,9 +154,9 @@ class DreamerV3Agent(nn.Module):
         device_type: str = 'cuda',
         compute_dtype: torch.dtype = torch.bfloat16,
     ) -> dict[str, float]:
-        """
+        '''
         單步 training: forward + backward + optimizer step.
-        """
+        '''
         # build obs & prevact
         obs = {k: data[k] for k in self.obs_space if k in data}
         obs['reward'] = data['reward']
@@ -254,14 +254,14 @@ class DreamerV3Agent(nn.Module):
             s = self.scales[k]
             if s > 0:
                 total = total + s * v.mean()
-                metrics[f'loss/{k}'] = v.mean().item()
+                metrics[f'loss/{k}'] = v.mean().detach().item()
                 metrics[f'scale/{k}'] = s
  
-        metrics['loss/total'] = total.item()
+        metrics['loss/total'] = total.detach().item()
         return total, losses, metrics
  
     def _make_prevact(self, action: torch.Tensor) -> torch.Tensor:
-        """action[:, 1:] = prevact[:, 1:], prevact[:, 0] = 0"""
+        '''action[:, 1:] = prevact[:, 1:], prevact[:, 0] = 0'''
         B, T, A = action.shape
         zero = torch.zeros(B, 1, A, device=action.device, dtype=action.dtype)
         return torch.cat([zero, action[:, :-1]], dim=1)
