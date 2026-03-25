@@ -3,7 +3,7 @@ total_env_steps: 100000
 seed_steps: 1024
 batch_size: 16
 seq_len: 64
-train_ratio: 256
+train_ratio: 91
  
 # --- Replay buffer ---
 buffer_capacity: 1000000
@@ -54,12 +54,16 @@ wm_kwargs:
   enc_depth: 64
   enc_mults: [2, 3, 4, 4]
   enc_kernel: 5
+  enc_layers: 3
+  enc_symlog: true
   img_size: [64, 64]
  
   # Decoder
   dec_depth: 64
   dec_mults: [2, 3, 4, 4]
   dec_kernel: 5
+  dec_layers: 3
+  dec_symlog: true
  
   # MLP / Head
   units: 1024

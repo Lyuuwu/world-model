@@ -51,6 +51,7 @@ class JSONLLogger:
                 parts.append(f'{k}={s:.4f}' if isinstance(s, float) else f'{k}={s}')
         print('==================================================')
         print(' | '.join(parts))
+        print('Max VRAM allocate:', torch.cuda.max_memory_allocated())
         print('==================================================')
         
     def save_config(self, config_dict: dict) -> None:

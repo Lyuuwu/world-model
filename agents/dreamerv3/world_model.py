@@ -100,12 +100,16 @@ class DreamerWorldModel(nn.Module):
         enc_depth: int=64,
         enc_mults: tuple[int, ...]=(2, 3, 4, 4),
         enc_kernel: int=5,
+        enc_layers: int=3,
+        enc_symlog: bool=True,
         img_size: tuple[int, int]=(64, 64),
         
         # --- Decoder ---
         dec_depth: int=64,
         dec_mults: tuple[int, ...]=(2, 3, 4, 4),
         dec_kernel: int=5,
+        dec_layers: int=3,
+        dec_symlog: bool=True,
         
         # --- MLP ---
         units: int=1024,
@@ -153,6 +157,8 @@ class DreamerWorldModel(nn.Module):
             img_size=img_size,
             kernel=enc_kernel,
             units=units,
+            mlp_layers=enc_layers,
+            symlog_vecs=enc_symlog,
             norm=norm,
             act=act
         )
@@ -182,6 +188,8 @@ class DreamerWorldModel(nn.Module):
             mults=dec_mults,
             kernel=dec_kernel,
             units=units,
+            mlp_layers=dec_layers,
+            symlog_vecs=dec_symlog,
             norm=norm,
             act=act,
             outscale=outscale
