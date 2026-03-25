@@ -330,7 +330,7 @@ class DreamerWorldModel(nn.Module):
         # reward loss
         rew_feat = feat if self.reward_grad else feat.detach()
         rew_dist = self.reward_head(rew_feat)
-        losses['rew'] = -rew_dist.loss(obs['reward'])   # (B, T)
+        losses['rew'] = rew_dist.loss(obs['reward'])   # (B, T)
         
         con_target = self._make_continue_target(obs)
         con_dist = self.continue_head(feat)
@@ -381,7 +381,8 @@ class DreamerWorldModel(nn.Module):
         
         if not ac_grads:
             start_feat = start_feat.detach()
-            img_feat = img_feat.detach()
+        
+        img_feat = img_feat.detach()
         full_feat = torch.cat([start_feat, img_feat], dim=1)    # (N, H+1, feat_dim)
         
         # --- Last action ---

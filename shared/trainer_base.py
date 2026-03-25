@@ -27,7 +27,8 @@ class TrainerBase(ABC):
         buffer: Any,
         logger: JSONLLogger,
         config: Config,
-        device: torch.device
+        device: torch.device,
+        save_checkpoint: bool=False,
     ):
         self.agent = agent
         self.vec_env = vec_env
@@ -36,6 +37,7 @@ class TrainerBase(ABC):
         self.logger = logger
         self.config = config
         self.device = device
+        self.save_checkpoint = save_checkpoint
         
         self.num_envs = vec_env.num_envs
         self._global_env_step = 0
@@ -52,7 +54,8 @@ class TrainerBase(ABC):
         self._prefill()
         self._main_loop()
         self._final_eval()
-        self._save_checkpoint(tag='final')
+        if self.save_checkpoint:
+            self._save_checkpoint(tag='final')
         self.logger.close()
     
     @abstractmethod
