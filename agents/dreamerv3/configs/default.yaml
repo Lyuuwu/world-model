@@ -3,7 +3,7 @@ total_env_steps: 100000
 seed_steps: 1024
 batch_size: 16
 seq_len: 64
-train_ratio: 91
+train_ratio: 256
  
 # --- Replay buffer ---
 buffer_capacity: 1000000
@@ -73,6 +73,8 @@ wm_kwargs:
   # Loss
   dyn_scale: 1.0
   rep_scale: 0.1
+  rew_scale: 1.0
+  con_scale: 1.0
   free_nats: 1.0
  
   # Network config

@@ -121,6 +121,8 @@ class DreamerWorldModel(nn.Module):
         # --- Loss ---
         dyn_scale: float=1.0,
         rep_scale: float=0.1,
+        rew_scale: float=1.0,
+        con_scale: float=1.0,
         free_nats: float=1.0,
         reward_grad: bool=False,
         
@@ -218,8 +220,8 @@ class DreamerWorldModel(nn.Module):
         self._loss_scales = {
             'dyn': dyn_scale,
             'rep': rep_scale,
-            'rew': 1.0,
-            'con': 1.0
+            'rew': rew_scale,
+            'con': con_scale
         }
         
         for key in self.dec_space:
