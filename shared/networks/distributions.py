@@ -183,18 +183,23 @@ class TwoHotCategorical(Dist):
 
     @property
     def mean(self) -> torch.Tensor:
-        '''
-        加權平均 = sum(probs * bins)
-
-        return: (...) 連續預測值
-        '''
-    
+        # bins are in real space, convert to symlog for averaging
+        symlog_bins = symlog(self._bins).double()
         probs64 = self._probs.double()
-        bins64 = self._bins.double()
-        weighted = probs64 * bins64
-        pos = torch.where(bins64 >= 0, weighted, torch.zeros_like(weighted)).sum(-1)
-        neg = torch.where(bins64 < 0, weighted, torch.zeros_like(weighted)).sum(-1)
-        return (pos + neg).float()
+        
+        # symmetric summation in symlog space
+        n = symlog_bins.shape[-1]
+        if n % 2 == 1:
+            m = (n - 1) // 2
+            p1, p2, p3 = probs64[..., :m], probs64[..., m:m+1], probs64[..., m+1:]
+            b1, b2, b3 = symlog_bins[..., :m], symlog_bins[..., m:m+1], symlog_bins[..., m+1:]
+            wavg = (p2 * b2).sum(-1) + ((p1 * b1).flip(-1) + (p3 * b3)).sum(-1)
+        else:
+            p1, p2 = probs64[..., :n//2], probs64[..., n//2:]
+            b1, b2 = symlog_bins[..., :n//2], symlog_bins[..., n//2:]
+            wavg = ((p1 * b1).flip(-1) + (p2 * b2)).sum(-1)
+        
+        return symexp(wavg.float())
 
     @property
     def mode(self) -> torch.Tensor:

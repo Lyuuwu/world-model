@@ -81,6 +81,8 @@ wm_kwargs:
   norm: rms                    # rms | layer | none
   act: silu                    # silu | gelu | relu | mish | tanh | none
   outscale: 1.0
+  rewhead_scale: 0.0
+  conhead_scale: 1.0
  
 ac_kwargs:
   # Network

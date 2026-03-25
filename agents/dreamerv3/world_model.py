@@ -30,7 +30,7 @@ class RewardHead(nn.Module):
         
         self.mlp = MLP(feat_dim, units, layers, norm, act)
         self.head = LinearHead(units, bins, outscale)
-        self.register_buffer('_bins', build_symexp_bins(), persistent=False)
+        self.register_buffer('_bins', build_symexp_bins(bins), persistent=False)
         
     def forward(self, feat: torch.Tensor) -> TwoHotCategorical:        
         x = self.head(self.mlp(feat))
@@ -135,6 +135,10 @@ class DreamerWorldModel(nn.Module):
         act: str='silu',
         outscale: float=1.0,
         
+        # --- outscale ---
+        rewhead_scale: float=0.0,
+        conhead_scale: float=1.0,
+        
         **kwargs
     ):
         super().__init__()
@@ -204,7 +208,7 @@ class DreamerWorldModel(nn.Module):
             bins=reward_bins,
             norm=norm,
             act=act,
-            outscale=0.0
+            outscale=rewhead_scale
         )
         
         self.continue_head = ContinueHead(
@@ -213,7 +217,7 @@ class DreamerWorldModel(nn.Module):
             layers=head_layers,
             norm=norm,
             act=act,
-            outscale=0.0
+            outscale=conhead_scale
         )
         
         # --- TEMP ---
@@ -326,7 +330,7 @@ class DreamerWorldModel(nn.Module):
         # reward loss
         rew_feat = feat if self.reward_grad else feat.detach()
         rew_dist = self.reward_head(rew_feat)
-        losses['rew'] = -rew_dist.log_prob(obs['reward'])   # (B, T)
+        losses['rew'] = -rew_dist.loss(obs['reward'])   # (B, T)
         
         con_target = self._make_continue_target(obs)
         con_dist = self.continue_head(feat)
