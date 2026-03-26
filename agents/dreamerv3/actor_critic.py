@@ -273,8 +273,8 @@ class DreamerActorCritic(nn.Module):
             max_limit=retnorm_limit
         )
         
-        self.valnorm = Normalizer(decay=valnorm_decay, use_percentile=False)
-        self.advnorm = Normalizer(decay=advnorm_decay, use_percentile=False)
+        self.valnorm = Normalizer(decay=valnorm_decay, use_percentile=False, enable=valnorm_enable)
+        self.advnorm = Normalizer(decay=advnorm_decay, use_percentile=False, enable=advnorm_enable)
     
     def forward(self, feat: torch.Tensor) -> torch.Tensor:
         return self.policy_head(feat).sample()
