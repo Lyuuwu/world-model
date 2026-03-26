@@ -318,7 +318,7 @@ class DreamerActorCritic(nn.Module):
         # --- discount weight ---
         
         disc = 1.0 if self.contdisc else 1.0 - 1.0 / self.horizon
-        weight = torch.cumprod(disc * traj.cont, dim=1) / disc              # (N, H+1)
+        weight = torch.cumprod(disc * traj.cont.float(), dim=1) / disc  # (N, H+1)
 
         # --- lambda return ---
         

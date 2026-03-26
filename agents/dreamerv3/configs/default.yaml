@@ -70,10 +70,6 @@ wm_kwargs:
   reward_bins: 255
  
   # Loss
-  dyn_scale: 1.0
-  rep_scale: 0.1
-  rew_scale: 1.0
-  con_scale: 1.0
   free_nats: 1.0
  
   # Network config

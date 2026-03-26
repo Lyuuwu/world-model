@@ -78,11 +78,17 @@ class EpisodeReplayBuffer:
         if is_terminal:
             self._commit_ongoing()
             
-    def add_episode(self, episode_data: dict[str, np.ndarray]):
-        ep_len = next(iter(episode_data.values())).shape[0]
+    def add_episode(self, episode: dict[str, np.ndarray]):
+        ep_len = next(iter(episode.values())).shape[0]
         if ep_len < self._min_episode_len:
             return
-        self._episodes.append(episode_data)
+        
+        action = episode['action']
+        prev_action = np.zeros_like(action)
+        prev_action[1:] = action[:-1]   # 第一步前面沒東西，補零
+        episode['prev_action'] = prev_action
+        
+        self._episodes.append(episode)
         self._episode_lenghts.append(ep_len)
         self._total_steps += ep_len
         self._evict()

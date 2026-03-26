@@ -334,10 +334,6 @@ class RSSM(nn.Module):
         
         return (feats, actions)
 
-    # ═══════════════════════════════════════════════
-    #  KL Loss (世界模型訓練用)
-    # ═══════════════════════════════════════════════
-
     def kl_loss(
         self,
         outputs: dict[str, torch.Tensor],   # observe() 的 outputs
@@ -353,7 +349,7 @@ class RSSM(nn.Module):
         post_dist = self._make_dist(posterior_logits)
         prior_dist = self._make_dist(prior_logits)
         
-        # KL shape: (B, T, stoch) → .sum(-1) → (B, T)
+        # KL shape: (B, T, stoch) > .sum(-1) > (B, T)
         dyn_loss = self._make_dist(posterior_logits.detach()).kl(prior_dist).sum(-1)  
         rep_loss = post_dist.kl(self._make_dist(prior_logits.detach())).sum(-1)
         

@@ -119,11 +119,6 @@ class DreamerWorldModel(nn.Module):
         reward_bins: int=255,
         
         # --- Loss ---
-        dyn_scale: float=1.0,
-        rep_scale: float=0.1,
-        rew_scale: float=1.0,
-        con_scale: float=1.0,
-        free_nats: float=1.0,
         reward_grad: bool=False,
         
         # --- Continue ---
@@ -145,9 +140,6 @@ class DreamerWorldModel(nn.Module):
         
         self.obs_space = obs_space
         self.action_dim = action_dim
-        self.dyn_scale = dyn_scale
-        self.rep_scale = rep_scale
-        self.free_nats = free_nats
         self.reward_grad = reward_grad
         self.contdisc = contdisc
         self.horizon = horizon
@@ -219,17 +211,6 @@ class DreamerWorldModel(nn.Module):
             act=act,
             outscale=conhead_scale
         )
-        
-        # --- TEMP ---
-        self._loss_scales = {
-            'dyn': dyn_scale,
-            'rep': rep_scale,
-            'rew': rew_scale,
-            'con': con_scale
-        }
-        
-        for key in self.dec_space:
-            self._loss_scales[key] = 1.0
             
     @property
     def feat_dim(self) -> int:
@@ -319,15 +300,14 @@ class DreamerWorldModel(nn.Module):
         metrics.update(kl_metrics)
         
         # decoder reconstruction losses
-        feat = wm_out.feat
         recons = self.decoder(wm_out.rssm_outputs)
         targets = self._preprocess_target(obs)
         
         for key, dist in recons.items():
-            target = targets[key].detach()
-            losses[key] = dist.loss(target)
+            losses[key] = dist.loss(targets[key].detach())
             
         # reward loss
+        feat = wm_out.feat
         rew_feat = feat if self.reward_grad else feat.detach()
         rew_dist = self.reward_head(rew_feat)
         losses['rew'] = rew_dist.loss(obs['reward'])   # (B, T)
@@ -337,26 +317,14 @@ class DreamerWorldModel(nn.Module):
         losses['con'] = con_dist.loss(con_target)
         
         # shape assertions
-        shapes = {k: v.shape for k, v in losses.items()}
-        assert all(s == (B, T) for s in shapes.values()), \
-            f'Loss shape mismatch: expected ({B}, {T}), got {shapes}'
-            
-        # scale and sum
-        assert set(losses.keys()) == set(self._loss_scales.keys()), \
-            f'Scale/loss key mismatch: {sorted(losses.keys())} vs {sorted(self._loss_scales.keys())}'
-            
-        total_loss = sum(
-            losses[k].mean() * self._loss_scales[k]
-            for k in losses
-        )
+        assert all(v.shape == (B, T) for v in losses.values())
         
         for k, v in losses.items():
             metrics[f'loss/{k}'] = v.mean().detach()
-        metrics['loss/total'] = total_loss.detach()
         metrics['reward/pred_mean'] = rew_dist.mean.mean().detach()
         metrics['continue/prob_mean'] = con_dist.prob(1.0).mean().detach()
         
-        return total_loss, losses, metrics
+        return losses, metrics
     
     def imagine(
         self,

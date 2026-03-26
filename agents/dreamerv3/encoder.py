@@ -92,7 +92,7 @@ class DreamerEncoder(nn.Module):
         imgs = [obs[k] for k in self.img_keys]
         
         # img: (B, C, H, W)
-        x = torch.cat(imgs, dim=1) / 255.0 - 0.5
+        x = torch.cat(imgs, dim=1).float() / 255.0 - 0.5
         x = self.cnn(x)
         
         return x

@@ -164,8 +164,7 @@ class DreamerV3Agent(nn.Module):
         obs['is_last'] = data['is_last']
         obs['is_terminal'] = data['is_terminal']
  
-        action = data['action']                  # (B, T, action_dim)
-        prevact = self._make_prevact(action)     # (B, T, action_dim)
+        prevact = data['prev_action']            # (B, T, action_dim)
  
         # forward
         with torch.autocast(device_type=device_type, dtype=compute_dtype):
@@ -197,9 +196,11 @@ class DreamerV3Agent(nn.Module):
         wm_out: WorldModelOutputs = self.world_model.observe(
             obs=obs, action=prevact, reset=obs['is_first'],
         )
-        wm_total, wm_losses, wm_metrics = self.world_model.compute_loss(
+        
+        wm_losses, wm_metrics = self.world_model.compute_loss(
             obs=obs, wm_out=wm_out,
         )
+        
         losses.update(wm_losses)
         metrics.update(wm_metrics)
  
@@ -259,10 +260,4 @@ class DreamerV3Agent(nn.Module):
  
         metrics['loss/total'] = total.detach().item()
         return total, losses, metrics
- 
-    def _make_prevact(self, action: torch.Tensor) -> torch.Tensor:
-        '''action[:, 1:] = prevact[:, 1:], prevact[:, 0] = 0'''
-        B, T, A = action.shape
-        zero = torch.zeros(B, 1, A, device=action.device, dtype=action.dtype)
-        return torch.cat([zero, action[:, :-1]], dim=1)
  
