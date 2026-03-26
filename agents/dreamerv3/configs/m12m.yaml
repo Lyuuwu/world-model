@@ -1,3 +1,5 @@
+train_ratio: 64
+
 wm_kwargs:
   h_dim: 2048                 # 8d
   rssm_hidden: 256             # d
