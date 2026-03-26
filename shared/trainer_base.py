@@ -54,8 +54,7 @@ class TrainerBase(ABC):
         self._prefill()
         self._main_loop()
         self._final_eval()
-        if self.save_checkpoint:
-            self._save_checkpoint(tag='final')
+        self._save_checkpoint(tag='final')
         self.logger.close()
     
     @abstractmethod
@@ -233,6 +232,9 @@ class TrainerBase(ABC):
         self.logger.log_print(metrics, self._global_env_step, prefix='final_eval')
         
     def _save_checkpoint(self, tag: str | int) -> None:
+        if not self.save_checkpoint:
+            return
+        
         ckpt_dir = self.logger.log_dir / 'checkpoints'
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         path = ckpt_dir / f'ckpt_{tag}.pt'
