@@ -218,9 +218,26 @@ class TwoHotCategorical(Dist):
         return: (...) log prob (負的 cross-entropy，越大越好)
         '''
         
-        target_encoded = twohot_symlog_encode(target, self.bins)
-        log_probs = F.log_softmax(self._logits, dim=-1)
-        return (target_encoded * log_probs).sum(dim=-1)
+        target = symlog(target)
+        below = (self.bins <= target[..., None]).int().sum(-1) - 1
+        above = len(self.bins) - (
+            self.bins > target[..., None]).int().sum(-1)
+        below = below.clamp(0, len(self.bins) - 1)
+        above = above.clamp(0, len(self.bins) - 1)
+        equal = (below == above)
+        dist_to_below = torch.where(equal, 1, torch.abs(self.bins[below] - target))
+        dist_to_above = torch.where(equal, 1, torch.abs(self.bins[above] - target))
+        total = dist_to_below + dist_to_above
+        weight_below = dist_to_above / total
+        weight_above = dist_to_below / total
+        
+        target = (
+            F.one_hot(below, len(self.bins)) * weight_below[..., None] +
+            F.one_hot(above, len(self.bins)) * weight_above[..., None]
+        )
+        log_pred = self.logits - torch.logsumexp(self.logits, -1, keepdim=True)
+        
+        return (target * log_pred).sum(-1)
 
 @register('dist', 'normal')
 class NormalDist(Dist):
