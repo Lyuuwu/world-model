@@ -127,6 +127,7 @@ class DreamerV3Agent(nn.Module):
         state: dict[str, torch.Tensor],
         prev_action: torch.Tensor,
         is_first: torch.Tensor,
+        mode: str='train'
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         # encoder → tokens
         obs_seq = {
@@ -142,7 +143,14 @@ class DreamerV3Agent(nn.Module):
  
         # feat → sample action
         feat = self.world_model.rssm.get_feat(new_state)
-        action = self.actor_critic.policy_head(feat).sample()
+        dist = self.actor_critic.policy_head(feat)
+        
+        if mode == 'train':
+            action = dist.sample()
+        elif mode == 'eval':
+            action = dist.mode
+        else:
+            raise ValueError
  
         return action, new_state
  
