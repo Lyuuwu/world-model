@@ -199,7 +199,7 @@ class TrainerBase(ABC):
                                         dtype=torch.bool, device=self.device)
                 with torch.no_grad():
                     action, state = self.agent.policy(
-                        obs_t, state, prev_act, is_first
+                        obs_t, state, prev_act, is_first, mode='eval'
                     )
  
                 if self.config.get('discrete', True):
