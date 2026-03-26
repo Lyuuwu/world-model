@@ -95,7 +95,7 @@ def compose_config(
  
     # --- Layer 3: task domain ---
     domain = task.split('_', 1)[0]  # "atari_pong" → "atari"
-    deep_update(config, _load_yaml(agent_dir / f'{domain}.yaml'))
+    deep_update(config, _load_yaml(project_root / 'configs' / f'{domain}.yaml'))
  
     # --- Layer 4: CLI overrides ---
     deep_update(config, parse_overrides(override_str))
