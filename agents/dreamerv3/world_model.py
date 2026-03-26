@@ -119,6 +119,7 @@ class DreamerWorldModel(nn.Module):
         reward_bins: int=255,
         
         # --- Loss ---
+        free_nats: float=1.0,
         reward_grad: bool=False,
         
         # --- Continue ---
@@ -140,6 +141,7 @@ class DreamerWorldModel(nn.Module):
         
         self.obs_space = obs_space
         self.action_dim = action_dim
+        self.free_nats = free_nats
         self.reward_grad = reward_grad
         self.contdisc = contdisc
         self.horizon = horizon

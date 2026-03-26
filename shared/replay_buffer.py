@@ -83,10 +83,7 @@ class EpisodeReplayBuffer:
         if ep_len < self._min_episode_len:
             return
         
-        action = episode['action']
-        prev_action = np.zeros_like(action)
-        prev_action[1:] = action[:-1]   # 第一步前面沒東西，補零
-        episode['prev_action'] = prev_action
+        episode['prev_action'] = self._make_prevact(episode['action'])
         
         self._episodes.append(episode)
         self._episode_lenghts.append(ep_len)
@@ -102,6 +99,9 @@ class EpisodeReplayBuffer:
         ep_len = data['reward'].shape[0]
         if ep_len < self._min_episode_len:
             return
+        
+        data['prev_action'] = self._make_prevact(data['action'])
+        
         self._episodes.append(data)
         self._episode_lenghts.append(ep_len)
         self._total_steps += ep_len
@@ -157,6 +157,11 @@ class EpisodeReplayBuffer:
             removed = self._episodes.pop(0)
             removed_len = self._episode_lenghts.pop(0)
             self._total_steps -= removed_len
+    
+    def _make_prevact(self, action: np.ndarray) -> np.ndarray:
+        prevact = np.zeros_like(action)
+        prevact[1:] = action[:-1]       # 第一步的前一步沒東西，補0
+        return prevact
     
     @property
     def total_steps(self) -> int:

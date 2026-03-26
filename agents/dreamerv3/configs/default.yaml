@@ -3,7 +3,7 @@ total_env_steps: 100000
 seed_steps: 1024
 batch_size: 16
 seq_len: 64
-train_ratio: 128
+train_ratio: 256
  
 # --- Replay buffer ---
 buffer_capacity: 1000000
