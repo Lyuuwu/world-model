@@ -168,7 +168,7 @@ class DreamerV3Agent(nn.Module):
  
         # forward
         with torch.autocast(device_type=device_type, dtype=compute_dtype):
-            total_loss, losses, metrics = self._compute_loss(obs, prevact)
+            total_loss, metrics = self._compute_loss(obs, prevact)
  
         # backward
         self.optimizer.zero_grad()
@@ -256,8 +256,7 @@ class DreamerV3Agent(nn.Module):
             if s > 0:
                 total = total + s * v.mean()
                 metrics[f'loss/{k}'] = v.mean().detach().item()
-                metrics[f'scale/{k}'] = s
  
         metrics['loss/total'] = total.detach().item()
-        return total, losses, metrics
+        return total, metrics
  
