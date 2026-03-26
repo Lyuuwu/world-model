@@ -39,7 +39,7 @@ log_dir: runs
  
 # --- Compute ---
 compute_dtype: bfloat16
-use_compile: true
+use_compile: false
 compile_mode: reduce-overhead
  
 wm_kwargs:
