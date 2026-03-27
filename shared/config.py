@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 def deep_update(base: dict, override: dict) -> dict:
-    ''' 遞迴合併 override 到 base（in-place）。 '''
+    ''' 遞迴合併 override 到 base '''
     for k, v in override.items():
         if k in base and isinstance(base[k], dict) and isinstance(v, dict):
             deep_update(base[k], v)

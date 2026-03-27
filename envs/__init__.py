@@ -37,10 +37,6 @@ _DOMAIN_BUILDERS: dict[str, Callable] = {
     'atari': _build_atari,
 }
 
-# ═══════════════════════════════════════════════════════════════
-#  Public API
-# ═══════════════════════════════════════════════════════════════
-
 def parse_task(task: str) -> tuple[str, str]:
     '''
     "atari_pong" -> ("atari", "pong")
@@ -106,13 +102,11 @@ def make_vec_env(
 
 def get_spaces(task: str, env_config: dict | None = None):
     '''
-    構建一個 temp env 來取得 obs_space / action_space，然後關掉。
+    構建一個 temp env 來取得 obs_space / action_space, 然後關掉。
     回傳 (obs_space_dict, num_actions)
     '''
     env = make_env(task, env_config, seed=0)
 
-    # DictObsWrapper 產出 dict obs，我們需要知道 image 的 shape
-    # reset 一次來拿 obs sample
     obs, _ = env.reset()
 
     # 從 obs dict 推 obs_space
@@ -124,8 +118,6 @@ def get_spaces(task: str, env_config: dict | None = None):
                 shape=val.shape,
                 dtype=val.dtype,
             )
-        # scalar fields (reward, is_first, ...) 不放進 obs_space
-        # agent 會用 exclude list 過濾
 
     num_actions = env.unwrapped.action_space.n
 

@@ -223,7 +223,7 @@ class CNNEncoder(nn.Module):
         
         flatten=True:  return tensor (B, D) \\
         flatten=False: return tensor (B, C', H', W') \\
-        intermidiates=True: return tuple (上述, [skip1, skip2, ...])
+        intermidiates=True: return tuple
         '''
         intermediates = []
         
@@ -305,31 +305,3 @@ def compute_cnn_out_dim(img_size: tuple[int, int],
     for _ in mults:
         h, w = h // 2, w // 2
     return depth * mults[-1] * h * w
-
-if __name__ == '__main__':
-    # --- config ---
-    B = 2
-    C = 3
-    H, W = 64, 64
-    DEPTH = 64
-    MULTS = (2, 3, 4, 4)
-
-    # --- encoder ---
-    encoder = CNNEncoder(in_channels=C, depth=DEPTH, mults=MULTS)
-    x = torch.rand(B, C, H, W)
-    z = encoder(x)
-
-    expected_dim = compute_cnn_out_dim((H, W), DEPTH, MULTS)
-    assert z.shape == (B, expected_dim), f"Encoder output shape wrong: {z.shape}"
-    print(f"✅ Encoder OK: {x.shape} -> {z.shape}")
-
-    # --- decoder ---
-    decoder = CNNDecoder(in_dim=expected_dim, out_channels=C, img_size=(H, W), depth=DEPTH, mults=MULTS)
-    recon = decoder(z)
-
-    assert recon.shape == (B, C, H, W), f"Decoder output shape wrong: {recon.shape}"
-    assert recon.min() >= 0.0 and recon.max() <= 1.0, "Decoder output out of [0,1]"
-    print(f"✅ Decoder OK: {z.shape} -> {recon.shape}")
-
-    # --- encode -> decode roundtrip ---
-    print(f"✅ Roundtrip OK, recon range: [{recon.min():.3f}, {recon.max():.3f}]")
