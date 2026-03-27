@@ -77,16 +77,12 @@ class CategoricalDist(Dist):
 class StraightThroughCategorical(Dist):
     '''
     離散 latent state z 的 categorical distribution
-
-    - forward pass: sample one-hot（不可微）
-    - backward pass: straight-through，梯度直接穿過 one-hot 回到 softmax probs
-    - unimix: 混合 (1-u)*softmax(logits) + u*uniform，防止概率歸零
     '''
 
     def __init__(self, logits: torch.Tensor, unimix_ratio: float = 0.01):
         '''
-        logits: (..., num_classes)  未經 softmax 的 raw logits
-        unimix_ratio: uniform mixture 比例，default 0.01 (DreamerV3)
+        logits: (..., num_classes) raw logits
+        unimix_ratio: uniform mixture
         '''
         self.dist = CategoricalDist(logits, unimix_ratio)
     
@@ -215,7 +211,7 @@ class TwoHotCategorical(Dist):
 
         target: (...) 連續值
 
-        return: (...) log prob (負的 cross-entropy，越大越好)
+        return: (...) log prob
         '''
         
         target = symlog(target)

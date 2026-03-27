@@ -279,7 +279,6 @@ class DreamerDecoder(nn.Module):
         act: str = 'silu',
         outscale: float = 1.0,
 
-        # --- Registry 相容 ---
         **kwargs,
     ):
         super().__init__()

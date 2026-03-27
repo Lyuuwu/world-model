@@ -94,17 +94,17 @@ class NormedBlockGRUCell(nn.Module):
         '''
         g = self.blocks
 
-        # ── Block expansion ──
+        # --- Block expansion ---
         x = x.unsqueeze(-2).expand(-1, g, -1)          # (B, g, input_dim)
         h_grouped = h.unflatten(-1, (g, -1))           # (B, g, hidden_dim // g)
         x = torch.cat([h_grouped, x], dim=-1).flatten(-2)
         # -> (B, hidden_dim + input_dim * g)
 
-        # ── Hidden layers -> gate projection ──
+        # --- Hidden layers -> gate projection ---
         x = self.hidden(x)         # (B, hidden_dim)
         x = self.gate_proj(x)      # (B, 3 * hidden_dim)
 
-        # ── GRU gate computation ──
+        # --- GRU gate computation ---
         x = x.unflatten(-1, (g, -1))
         reset, cand, update = [gate.flatten(-2) for gate in x.chunk(3, dim=-1)]
 
@@ -122,7 +122,7 @@ class NormedBlockGRUCell(nn.Module):
 
 class GRUSequence(nn.Module):
     '''
-    多步、多層 GRU：整段序列進去，所有時步的 hidden state 出來
+    多步、多層 GRU: 整段序列進去，所有時步的 hidden state 出來
     '''
 
     def __init__(self,
@@ -134,9 +134,6 @@ class GRUSequence(nn.Module):
         self.hidden_dim = hidden_dim
         self.layers = layers
 
-        # 建立 nn.ModuleList，包含 layers 個 NormedGRUCell
-        # 第一層: input_dim -> hidden_dim
-        # 之後每層: hidden_dim -> hidden_dim (上一層的輸出作為下一層的輸入)
         dims = [input_dim] + [hidden_dim] * layers
         
         self.cells = nn.ModuleList([
@@ -183,13 +180,6 @@ class GRUSequence(nn.Module):
         return h_seq, h_last
 
 class RecurrentStateModel(nn.Module):
-    '''
-    通用版 RSSM recurrent block：
-    embed(z, a) -> sequence_model_cell(embed, h) -> h_next
-
-    透過 registry 可以切換 cell 類型 (gru, block_gru, ...)
-    '''
-
     def __init__(self,
                  h_dim: int,
                  z_dim: int,
