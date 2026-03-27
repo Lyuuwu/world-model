@@ -92,7 +92,7 @@ class StraightThroughCategorical(Dist):
 
     @property
     def mode(self) -> torch.Tensor:
-        onehot = F.one_hot(self.dist.mode, self.dist._num_classes).detach()
+        onehot = F.one_hot(self.dist.mode, self.dist._num_classes)
         return onehot.float()
 
     def sample(self) -> torch.Tensor:
@@ -133,15 +133,23 @@ class StraightThroughCategorical(Dist):
 ''' TwoHotCategorical '''
 
 def build_symexp_bins(num_bins: int = 255,
-                      lower: float = -20.0,
-                      upper: float = 20.0) -> torch.Tensor:
+                      len: int=20) -> torch.Tensor:
     '''
     建立 symexp-spaced bins
 
     return: (num_bins,) 1-D tensor
     '''
-    linear_bins = torch.linspace(lower, upper, num_bins)
-    return symexp(linear_bins)
+    
+    if num_bins % 2 == 1:
+        half = torch.linspace(-len, 0, num_bins // 2 + 1)
+        half = symexp(half)
+        rev_h = torch.flip(-half[:-1], dims=[0])
+    else:
+        half = torch.linspace(-len, 0, num_bins // 2)
+        half = symexp(half)
+        rev_h = torch.flip(-half, dims=[0])
+    
+    return torch.cat((half, rev_h))
 
 @register('dist', 'twohot')
 class TwoHotCategorical(Dist):
@@ -194,7 +202,7 @@ class TwoHotCategorical(Dist):
             b1, b2 = bins64[..., :n//2], bins64[..., n//2:]
             wavg = ((p1 * b1).flip(-1) + (p2 * b2)).sum(-1)
         
-        return symexp(wavg.float())
+        return wavg.float()
 
     @property
     def mode(self) -> torch.Tensor:
