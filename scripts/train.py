@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 def bless_banner():
-    bless = r"""
+    bless = r'''
                                   /===-_---~~~~~~~~~------____
                                  |===-~___                _,-'
                   -==\\                         `//~\\   ~~~~`---.___.-~~
@@ -39,7 +39,7 @@ def bless_banner():
     ;'( ')/ ,)(                              ~~~~~~~~~~
    ' ') '( (/
      '   '  `
-    """
+    '''
     
     print(bless)
     print(f'[=== THE GOD DRAGON BLESS THIS PROGRAM ===]')

@@ -10,9 +10,9 @@ from shared.networks.distributions import StraightThroughCategorical
 
 @register('rssm', 'dreamerv3')
 class RSSM(nn.Module):
-    """
+    '''
     DreamerV3 Recurrent State-Space Model
-    """
+    '''
 
     def __init__(self,
                  
@@ -67,9 +67,9 @@ class RSSM(nn.Module):
         self.posterior = self._build_posterior(h_dim, hidden, stoch, classes, post_layers, token_dim, norm, act, outscale)
     
     def _build_core(self, action_dim, h_dim, hidden, blocks, dyn_layers, norm, act):
-        """
+        '''
         三條 input branch + NormedBlockGRUCell
-        """
+        '''
 
         dynin0 = NormedLinear(h_dim, hidden, norm, act)
         dynin1 = NormedLinear(self.stoch * self.classes, hidden, norm, act)
@@ -87,13 +87,13 @@ class RSSM(nn.Module):
         return dynin0, dynin1, dynin2, cell
 
     def _build_prior(self, h_dim, hidden, stoch, classes, layers, norm, act, outscale):
-        """
+        '''
         Prior MLP: deter -> stoch logits
         
         結構:
         1. layers 個 NormedLinear(hidden -> hidden)
         2. Linear(hidden -> stoch * classes)，用 outscale init
-        """
+        '''
         
         prior = nn.Sequential(*[
             NormedLinear(h_dim if i == 0 else hidden, hidden, norm, act)
@@ -103,9 +103,9 @@ class RSSM(nn.Module):
         return prior
     
     def _build_posterior(self, h_dim, hidden, stoch, classes, layers, token_dim, norm, act, outscale):
-        """
+        '''
         Posterior MLP: concat(deter, tokens) -> stoch logits
-        """
+        '''
         posterior = nn.Sequential(*[
             NormedLinear((h_dim + token_dim) if i == 0 else hidden, hidden, norm, act)
             for i in range(layers)
@@ -118,18 +118,18 @@ class RSSM(nn.Module):
         return ('deter', 'stoch')
     
     def initial_state(self, batch_size: int, device: torch.device = 'cpu') -> dict[str, torch.Tensor]:
-        """回傳全零初始 state dict"""
+        '''回傳全零初始 state dict'''
         return {
             'deter': torch.zeros(batch_size, self.h_dim, device=device),
             'stoch': torch.zeros(batch_size, self.stoch, self.classes, device=device),
         }
     
     def get_feat(self, state: dict[str, torch.Tensor]) -> torch.Tensor:
-        """
+        '''
         state -> feature vector for downstream heads (decoder, reward, continue)
         
         return: (..., feat_dim) where feat_dim = h_dim + stoch * classes
-        """
+        '''
         stoch = state['stoch'].flatten(-2)
         return torch.cat([state['deter'], stoch], dim=-1)
 
@@ -138,11 +138,11 @@ class RSSM(nn.Module):
               stoch: torch.Tensor,     # (B, stoch, classes)
               action: torch.Tensor,    # (B, action_dim)
               ) -> torch.Tensor:       # (B, h_dim)
-        """
+        '''
         Block GRU deterministic state transition
 
         三條 input branch -> concat -> NormedBlockGRUCell
-        """
+        '''
         action = action / torch.maximum(torch.ones_like(action), torch.abs(action)).detach()
         
         x0 = self.dynin0(deter)                # (B, hidden)
@@ -154,20 +154,20 @@ class RSSM(nn.Module):
         return self.cell(x, deter)
     
     def _prior_logits(self, deter: torch.Tensor) -> torch.Tensor:
-        """
+        '''
         deter -> prior logits
 
         return: (..., stoch, classes)
-        """
+        '''
         x = self.prior(deter)
         return x.reshape(x.shape[:-1] + (self.stoch, self.classes))
     
     def _posterior_logits(self, deter: torch.Tensor, token: torch.Tensor) -> torch.Tensor:
-        """
+        '''
         (deter, token) -> posterior logits
         
         return: (..., stoch, classes)
-        """
+        '''
         
         x = torch.cat([deter, token], dim=-1)
         x = self.posterior(x)
@@ -183,7 +183,7 @@ class RSSM(nn.Module):
         action: torch.Tensor,
         reset: torch.Tensor,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        """
+        '''
         單步 posterior transition
 
         in:
@@ -195,7 +195,7 @@ class RSSM(nn.Module):
         return:
             - next_state: {deter, stoch}
             - output: {deter: (B, h_dim), stoch: (B, stoch, classes), logits: (B, stoch, classes)}
-        """
+        '''
         
         mask = (~reset).float().unsqueeze(-1)   # (B, 1)
         
@@ -219,7 +219,7 @@ class RSSM(nn.Module):
         reset: torch.Tensor,       # (B, T) bool
         state: dict[str, torch.Tensor] | None = None,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        """
+        '''
         整段序列的 posterior rollout
 
         in:
@@ -230,7 +230,7 @@ class RSSM(nn.Module):
         return:
             - final_state: {deter, stoch}
             - outputs: {deter: (B, T, h_dim), stoch: (B, T, stoch, classes), logit: (B, T, stoch, classes)}
-        """
+        '''
         
         if state is None:
             state = self.initial_state(tokens.shape[0], tokens.device)
@@ -249,7 +249,7 @@ class RSSM(nn.Module):
         state: dict[str, torch.Tensor],
         action: torch.Tensor,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        """
+        '''
         單步 prior transition
 
         in:
@@ -259,7 +259,7 @@ class RSSM(nn.Module):
         return:
             - next_state: {deter, stoch}
             - feat: {deter: (B, h_dim), stoch: (B, stoch, classes), logit: (B, stoch, classes)}
-        """
+        '''
         
         h = self._core(state['deter'], state['stoch'], action)
         logit = self._prior_logits(h)
@@ -278,7 +278,7 @@ class RSSM(nn.Module):
         horizon: int = 15,
         action_seq: torch.Tensor | None = None
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
-        """
+        '''
         多步 imagination rollout
 
         in:
@@ -287,7 +287,7 @@ class RSSM(nn.Module):
         return:
             - feats = {deter: (B, H, ...), stoch: (B, H, ...), logit: (B, H, ...)}
             - actions = (B, H, action_dim)
-        """
+        '''
         
         assert (policy is None) != (action_seq is None), \
             'Exactly one of policy_fn or action_sequence must be provided'
@@ -319,9 +319,9 @@ class RSSM(nn.Module):
         outputs: dict[str, torch.Tensor],   # observe() 的 outputs
         free_nats: float = 1.0,
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
-        """
+        '''
         計算 dynamics loss 和 representation loss
-        """
+        '''
         
         posterior_logits = outputs['logit']
         prior_logits = self._prior_logits(outputs['deter'])

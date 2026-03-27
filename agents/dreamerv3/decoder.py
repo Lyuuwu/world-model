@@ -16,9 +16,9 @@ from shared.networks.distributions import CategoricalDist
 from shared.networks.losses import MSE, Agg
 
 class ImageSpatialProjection(nn.Module):
-    """
+    '''
     feat 的 deter/stoch 分別投影到 spatial feature map，再相加
-    """
+    '''
 
     def __init__(
         self,
@@ -64,9 +64,9 @@ class ImageSpatialProjection(nn.Module):
         deter: torch.Tensor,   # (B, h_dim)
         stoch: torch.Tensor,   # (B, stoch_flat)  已 flatten
     ) -> torch.Tensor:
-        """
-        return: (B, C_spatial, H_min, W_min)  可以直接丟進 CNN upsample
-        """
+        '''
+        return: (B, C_spatial, H_min, W_min)
+        '''
         B = deter.shape[0]
         C, H, W = self.spatial_shape
         
@@ -96,9 +96,9 @@ class ImageSpatialProjection(nn.Module):
             ...
 
 class VectorDecoderHead(nn.Module):
-    """
+    '''
     feat -> shared MLP body -> per-key LinearHead -> Distribution
-    """
+    '''
 
     def __init__(
         self,
@@ -156,9 +156,9 @@ class VectorDecoderHead(nn.Module):
             ...
 
 class ImageDecoderHead(nn.Module):
-    """
+    '''
     feat > ImageSpatialProjection > CNN upsample > sigmoid > MSE per pixel
-    """
+    '''
 
     def __init__(
         self,
@@ -214,9 +214,9 @@ class ImageDecoderHead(nn.Module):
         deter: torch.Tensor,   # (B, h_dim)
         stoch: torch.Tensor,   # (B, stoch_flat)
     ) -> dict[str, torch.Tensor]:
-        """
+        '''
         return: {key: ImageMSEDist}
-        """
+        '''
         
         x = self.spatial_proj(deter, stoch)
         x = self.cnn_up(x)
@@ -248,9 +248,9 @@ class ImageDecoderHead(nn.Module):
 # ═══════════════════════════════════════════════════════════════
 
 class DreamerDecoder(nn.Module):
-    """
+    '''
     Decoder of Dreamerv3
-    """
+    '''
 
     def __init__(
         self,

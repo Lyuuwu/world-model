@@ -98,9 +98,9 @@ class ConvTransposeBlock(nn.Module):
         return x
 
 class CNNUpsampleStack(nn.Module):
-    """
+    '''
     純 CNN upsample: (B, C_in, H_min, W_min) -> (B, out_channels, H, W)
-    """
+    '''
     
     def __init__(
         self,
@@ -155,10 +155,10 @@ class CNNUpsampleStack(nn.Module):
         self._out_act = out_act
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
+        '''
         x: (B, depths[-1], H_min, W_min)  ← 已是 spatial tensor
         return: (B, out_channels, H, W)
-        """
+        '''
         
         for block in self.blocks:
             x = block(x)

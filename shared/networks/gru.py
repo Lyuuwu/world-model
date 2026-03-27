@@ -48,7 +48,7 @@ class NormedGRUCell(nn.Module):
 
 @register('sequence_model', 'block_gru')
 class NormedBlockGRUCell(nn.Module):
-    """
+    '''
     Block-diagonal GRU cell，從 DreamerV3 RSSM 的 _core 抽出。
 
     特點:
@@ -57,7 +57,7 @@ class NormedBlockGRUCell(nn.Module):
     - 3-gate GRU：reset gate 乘在 candidate 上，update gate 偏移 -1（傾向保留舊 state）
 
     Conforms to SequenceModelCell protocol: forward(x, h) -> h_next
-    """
+    '''
 
     def __init__(self,
                  input_dim: int,
@@ -86,12 +86,12 @@ class NormedBlockGRUCell(nn.Module):
         self.gate_proj = BlockLinear(hidden_dim, 3 * hidden_dim, blocks)
 
     def forward(self, x: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        """
+        '''
         x: (B, input_dim)  — 已經 embed 過的輸入
         h: (B, hidden_dim)  — 上一步的 deterministic state
 
         return: h_next (B, hidden_dim)
-        """
+        '''
         g = self.blocks
 
         # ── Block expansion ──

@@ -11,7 +11,7 @@ from shared.networks.cnn import CNNEncoder, compute_cnn_out_dim
 from shared.networks.mlp import MLP
 
 class DreamerEncoder(nn.Module):
-    """
+    '''
     - image keys  -> CNNEncoder -> flatten
     - vector keys -> symlog (optional) -> MLP
     
@@ -21,7 +21,7 @@ class DreamerEncoder(nn.Module):
     
     forward out:
         - (B, T, token_dim) | token_dim = cnn_flat + mlp_units
-    """
+    '''
 
     def __init__(
         self,
@@ -86,9 +86,9 @@ class DreamerEncoder(nn.Module):
         return total
 
     def _encode_images(self, obs: dict[str, torch.Tensor]) -> torch.Tensor:
-        """
+        '''
         Stack image keys along channel dim -> CNNEncoder -> (prod(bshape), cnn_flat_dim)
-        """
+        '''
         imgs = [obs[k] for k in self.img_keys]
         
         # img: (B, C, H, W)
@@ -99,9 +99,9 @@ class DreamerEncoder(nn.Module):
         
 
     def _encode_vectors(self, obs: dict[str, torch.Tensor]) -> torch.Tensor:
-        """
+        '''
         Concat vector keys -> optional symlog -> MLP -> (prod(bshape), units)
-        """
+        '''
         
         vecs = self._vec_cat(obs)
         param_dtype = next(self.vec_mlp.parameters()).dtype
@@ -130,11 +130,11 @@ class DreamerEncoder(nn.Module):
         obs: dict[str, torch.Tensor],
         bdims: int = 2,                   # leading batch dims: 2=(B,T,...), 1=(B,...)
     ) -> torch.Tensor:
-        """
+        '''
         obs: dict of (B, T, *shape) or (B, *shape) tensors
         
         return: tokens (B, T, token_dim) or (B, token_dim)
-        """
+        '''
         first_key = next(iter(obs))
         bshape = obs[first_key].shape[:bdims]
         

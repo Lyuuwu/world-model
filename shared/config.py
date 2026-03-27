@@ -70,11 +70,11 @@ def compose_config(
     project_root: Path | None = None,
     profile: str | None = None
 ) -> dict:
-    """
+    '''
     組合 config
  
     task 格式: "atari_pong" -> domain="atari", game="pong"
-    """
+    '''
     if project_root is None:
         # 假設從 scripts/ 執行，project root 是上一層
         project_root = Path(__file__).resolve().parent.parent
@@ -107,11 +107,11 @@ def compose_config(
     return config
 
 class Config:
-    """
+    '''
     dict wrapper: 支援 config.lr 和 config['lr'] 兩種 access
     
     方便 agent code 讀取
-    """
+    '''
  
     def __init__(self, d: dict):
         self._data = d

@@ -7,7 +7,7 @@ from shared.trainer_base import TrainerBase
  
  
 class InterleavedTrainer(TrainerBase):
-    """
+    '''
     Interleaved collect-train loop:
  
         for step in total_env_steps:
@@ -16,7 +16,7 @@ class InterleavedTrainer(TrainerBase):
                 for _ in train_steps:
                     batch = buffer.sample()
                     metrics = agent.train_step(batch)
-    """
+    '''
  
     def _main_loop(self) -> None:
         cfg = self.config
