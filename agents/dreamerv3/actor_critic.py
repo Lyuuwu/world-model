@@ -276,8 +276,11 @@ class DreamerActorCritic(nn.Module):
         self.valnorm = Normalizer(decay=valnorm_decay, use_percentile=False, enable=valnorm_enable)
         self.advnorm = Normalizer(decay=advnorm_decay, use_percentile=False, enable=advnorm_enable)
     
-    def forward(self, feat: torch.Tensor) -> torch.Tensor:
-        return self.policy_head(feat).sample()
+    def forward(self, feat: torch.Tensor, train: bool=True) -> torch.Tensor:
+        if train:
+            return self.policy_head(feat).sample()
+        else:
+            return self.policy_head(feat).mode
     
     if TYPE_CHECKING:
         def __call__(self, feat: torch.Tensor) -> torch.Tensor:

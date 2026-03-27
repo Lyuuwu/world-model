@@ -179,12 +179,10 @@ class TwoHotCategorical(Dist):
 
     @property
     def mean(self) -> torch.Tensor:
-        # bins are in real space, convert to symlog for averaging
-        bins64 = symlog(self._bins).double()
+        bins64 = self._bins.double()
         probs64 = self._probs.double()
-        
-        # symmetric summation in symlog space
         n = bins64.shape[-1]
+
         if n % 2 == 1:
             m = (n - 1) // 2
             p1, p2, p3 = probs64[..., :m], probs64[..., m:m+1], probs64[..., m+1:]
@@ -214,7 +212,7 @@ class TwoHotCategorical(Dist):
         return: (...) log prob
         '''
         
-        target = symlog(target)
+        target = symlog(target).detach()
         below = (self.bins <= target[..., None]).int().sum(-1) - 1
         above = len(self.bins) - (
             self.bins > target[..., None]).int().sum(-1)
