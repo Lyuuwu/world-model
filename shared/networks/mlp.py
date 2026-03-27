@@ -254,19 +254,3 @@ class NormedBlockLinear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.act(self.norm(self.block(x)))
 
-if __name__ == '__main__':
-    x = torch.randn(4, 32)
-    print(f'x: {x}')
-    
-    def test(name, fn):
-        try:
-            out = fn()
-            print(f"PASS  {name}  -> {out.shape}")
-        except Exception as e:
-            print(f"FAIL  {name}: {e}")
-
-    test("get_norm none",  lambda: get_norm('none', 32)(x))
-    test("NormedLinear",   lambda: NormedLinear(32, 64)(x))
-    test("MLP",            lambda: MLP(32)(x))
-    test("MLPHead",        lambda: MLPHead(32, 10)(x))
-    test("BlockLinear",    lambda: BlockLinear(32, 64, blocks=8)(x))
