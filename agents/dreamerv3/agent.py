@@ -175,8 +175,7 @@ class DreamerV3Agent(nn.Module):
         prevact = data['prev_action']            # (B, T, action_dim)
  
         # forward
-        with torch.autocast(device_type=device_type, dtype=compute_dtype):
-            total_loss, metrics = self._compute_loss(obs, prevact)
+        total_loss, metrics = self._compute_loss(obs, prevact, device_type, compute_dtype)
  
         # backward
         self.optimizer.zero_grad()
@@ -194,6 +193,8 @@ class DreamerV3Agent(nn.Module):
         self,
         obs: dict[str, torch.Tensor],
         prevact: torch.Tensor,
+        device_type='cuda',
+        compute_dtype=torch.bfloat16
     ) -> tuple[torch.Tensor, dict, dict]:
         B, T = obs['is_first'].shape
         config = self.config
@@ -201,13 +202,14 @@ class DreamerV3Agent(nn.Module):
         metrics: dict[str, float] = {}
  
         # --- world model forward ---
-        wm_out: WorldModelOutputs = self.world_model.observe(
-            obs=obs, action=prevact, reset=obs['is_first'],
-        )
+        with torch.autocast(device_type, compute_dtype):
+            wm_out: WorldModelOutputs = self.world_model.observe(
+                obs=obs, action=prevact, reset=obs['is_first'],
+            )
         
-        wm_losses, wm_metrics = self.world_model.compute_loss(
-            obs=obs, wm_out=wm_out,
-        )
+            wm_losses, wm_metrics = self.world_model.compute_loss(
+                obs=obs, wm_out=wm_out,
+            )
         
         losses.update(wm_losses)
         metrics.update(wm_metrics)

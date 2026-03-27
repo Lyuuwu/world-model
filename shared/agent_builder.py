@@ -73,6 +73,7 @@ def _build_dreamerv3(
         # gradient flow
         ac_grads=config.get('ac_grads', False),
         reward_grad=config.get('reward_grad', False),
+        repval_grad=config.get('repval_grad', False),
         repval_loss=config.get('repval_loss', False),
 
         # imagination
