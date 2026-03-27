@@ -54,21 +54,17 @@ class RSSM(nn.Module):
         
         self.feat_dim = h_dim + stoch * classes   # downstream heads 用的維度
         
-        # ── Block GRU core ──
+        # --- Block GRU core ---
         # 三條 input branch：deter, stoch, action 各自先投影到 hidden
-        # concat → NormedBlockGRUCell (block expansion + hidden layers + gate)
+        # 串起來扔GRU
         self.dynin0, self.dynin1, self.dynin2, \
         self.cell = self._build_core(action_dim, h_dim, hidden, blocks, dyn_layers, norm, act)
         
-        # ── Prior network: h → logits ──
+        # --- Prior network: h -> logits ---
         self.prior = self._build_prior(h_dim, hidden, stoch, classes, prior_layers, norm, act, outscale)
         
-        # ── Posterior network: (h, embed) → logits ──
+        # --- Posterior network ---
         self.posterior = self._build_posterior(h_dim, hidden, stoch, classes, post_layers, token_dim, norm, act, outscale)
-
-    # ═══════════════════════════════════════════════
-    #  Build helpers (把 __init__ 拆乾淨)
-    # ═══════════════════════════════════════════════
     
     def _build_core(self, action_dim, h_dim, hidden, blocks, dyn_layers, norm, act):
         """
@@ -116,10 +112,6 @@ class RSSM(nn.Module):
         ], LinearHead(hidden, stoch * classes, outscale))
         
         return posterior
-
-    # ═══════════════════════════════════════════════
-    #  State management
-    # ═══════════════════════════════════════════════
     
     @property
     def state_keys(self) -> tuple[str, ...]:
@@ -141,10 +133,6 @@ class RSSM(nn.Module):
         stoch = state['stoch'].flatten(-2)
         return torch.cat([state['deter'], stoch], dim=-1)
 
-    # ═══════════════════════════════════════════════
-    #  Core: Block GRU transition
-    # ═══════════════════════════════════════════════
-
     def _core(self,
               deter: torch.Tensor,     # (B, h_dim)
               stoch: torch.Tensor,     # (B, stoch, classes)
@@ -164,10 +152,6 @@ class RSSM(nn.Module):
         
         # Block expansion + hidden layers + gate 全部委託給 cell
         return self.cell(x, deter)
-    
-    # ═══════════════════════════════════════════════
-    #  Prior & Posterior
-    # ═══════════════════════════════════════════════
     
     def _prior_logits(self, deter: torch.Tensor) -> torch.Tensor:
         """
@@ -191,10 +175,6 @@ class RSSM(nn.Module):
     
     def _make_dist(self, logits: torch.Tensor) -> StraightThroughCategorical:
         return StraightThroughCategorical(logits, unimix_ratio=self.unimix)
-
-    # ═══════════════════════════════════════════════
-    #  Observe (posterior, 用於 world model training)
-    # ═══════════════════════════════════════════════
     
     def observe_step(
         self,
