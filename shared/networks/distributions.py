@@ -156,6 +156,7 @@ class TwoHotCategorical(Dist):
         '''
         self._logits = logits
 
+        # 建原始數值空間的 bins
         if bins is None:
             bins = build_symexp_bins()
 
@@ -212,7 +213,7 @@ class TwoHotCategorical(Dist):
         return: (...) log prob
         '''
         
-        target = symlog(target).detach()
+        target = target.detach()
         below = (self.bins <= target[..., None]).int().sum(-1) - 1
         above = len(self.bins) - (
             self.bins > target[..., None]).int().sum(-1)
