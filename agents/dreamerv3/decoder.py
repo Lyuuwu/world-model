@@ -97,7 +97,7 @@ class ImageSpatialProjection(nn.Module):
 
 class VectorDecoderHead(nn.Module):
     """
-    feat → shared MLP body → per-key LinearHead → Distribution
+    feat -> shared MLP body -> per-key LinearHead -> Distribution
     """
 
     def __init__(

@@ -129,7 +129,7 @@ class DreamerV3Agent(nn.Module):
         is_first: torch.Tensor,
         mode: str='train'
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        # encoder → tokens
+        # encoder -> tokens
         obs_seq = {
             k: v.unsqueeze(1) for k, v in obs.items()
             if k not in ('is_first', 'is_last', 'is_terminal', 'reward')
@@ -141,7 +141,7 @@ class DreamerV3Agent(nn.Module):
             state, tokens.squeeze(1), prev_action, is_first
         )
  
-        # feat → sample action
+        # feat -> sample action
         feat = self.world_model.rssm.get_feat(new_state)
         dist = self.actor_critic.policy_head(feat)
         

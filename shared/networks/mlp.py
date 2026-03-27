@@ -261,7 +261,7 @@ if __name__ == '__main__':
     def test(name, fn):
         try:
             out = fn()
-            print(f"PASS  {name}  → {out.shape}")
+            print(f"PASS  {name}  -> {out.shape}")
         except Exception as e:
             print(f"FAIL  {name}: {e}")
 

@@ -56,7 +56,7 @@ class NormedBlockGRUCell(nn.Module):
     - 通過 NormedBlockLinear hidden layers
     - 3-gate GRU：reset gate 乘在 candidate 上，update gate 偏移 -1（傾向保留舊 state）
 
-    Conforms to SequenceModelCell protocol: forward(x, h) → h_next
+    Conforms to SequenceModelCell protocol: forward(x, h) -> h_next
     """
 
     def __init__(self,
@@ -98,9 +98,9 @@ class NormedBlockGRUCell(nn.Module):
         x = x.unsqueeze(-2).expand(-1, g, -1)          # (B, g, input_dim)
         h_grouped = h.unflatten(-1, (g, -1))           # (B, g, hidden_dim // g)
         x = torch.cat([h_grouped, x], dim=-1).flatten(-2)
-        # → (B, hidden_dim + input_dim * g)
+        # -> (B, hidden_dim + input_dim * g)
 
-        # ── Hidden layers → gate projection ──
+        # ── Hidden layers -> gate projection ──
         x = self.hidden(x)         # (B, hidden_dim)
         x = self.gate_proj(x)      # (B, 3 * hidden_dim)
 
@@ -110,7 +110,7 @@ class NormedBlockGRUCell(nn.Module):
 
         reset  = torch.sigmoid(reset)
         cand   = torch.tanh(reset * cand)
-        update = torch.sigmoid(update - 1)          # bias → 傾向保留舊 state
+        update = torch.sigmoid(update - 1)
 
         h_next = update * cand + (1 - update) * h
         return h_next
@@ -185,7 +185,7 @@ class GRUSequence(nn.Module):
 class RecurrentStateModel(nn.Module):
     '''
     通用版 RSSM recurrent block：
-    embed(z, a) → sequence_model_cell(embed, h) → h_next
+    embed(z, a) -> sequence_model_cell(embed, h) -> h_next
 
     透過 registry 可以切換 cell 類型 (gru, block_gru, ...)
     '''

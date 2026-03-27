@@ -245,7 +245,7 @@ class TrainerBase(ABC):
             'global_env_step': self._global_env_step,
             'buffer_stats': self.buffer.stats,
         }, path)
-        print(f'[Checkpoint] Saved → {path}')
+        print(f'[Checkpoint] Saved -> {path}')
  
     def _load_checkpoint(self, path: str | Path) -> None:
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
@@ -255,7 +255,7 @@ class TrainerBase(ABC):
         self._global_env_step = ckpt.get('global_env_step', 0)
         
     def _action_to_vector(self, action_int: int | np.ndarray) -> np.ndarray:
-        '''把 discrete action int → one-hot vector'''
+        '''把 discrete action int -> one-hot vector'''
         if self.config.get('discrete', True):
             vec = np.zeros(self._num_actions, dtype=np.float32)
             vec[int(action_int)] = 1.0

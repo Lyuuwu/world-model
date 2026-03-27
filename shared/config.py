@@ -39,7 +39,7 @@ def _parse_value(s: str) -> Any:
 def parse_overrides(override_str: str | None) -> dict:
     '''
     解析 CLI override string: "lr=3e-4,batch_size=32,wm_kwargs.h_dim=2048"
-    dot-separated keys → nested dict
+    dot-separated keys -> nested dict
     '''
     if not override_str:
         return {}
@@ -73,7 +73,7 @@ def compose_config(
     """
     組合 config
  
-    task 格式: "atari_pong" → domain="atari", game="pong"
+    task 格式: "atari_pong" -> domain="atari", game="pong"
     """
     if project_root is None:
         # 假設從 scripts/ 執行，project root 是上一層
@@ -94,7 +94,7 @@ def compose_config(
         deep_update(config, _load_yaml(profile_path))
  
     # --- Layer 3: task domain ---
-    domain = task.split('_', 1)[0]  # "atari_pong" → "atari"
+    domain = task.split('_', 1)[0]  # "atari_pong" -> "atari"
     deep_update(config, _load_yaml(project_root / 'configs' / f'{domain}.yaml'))
  
     # --- Layer 4: CLI overrides ---

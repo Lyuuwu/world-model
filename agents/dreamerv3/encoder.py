@@ -12,8 +12,8 @@ from shared.networks.mlp import MLP
 
 class DreamerEncoder(nn.Module):
     """
-    - image keys  → CNNEncoder → flatten
-    - vector keys → symlog (optional) → MLP
+    - image keys  -> CNNEncoder -> flatten
+    - vector keys -> symlog (optional) -> MLP
     
     forward in:
         - images:  (B, T, C, H, W)
@@ -87,7 +87,7 @@ class DreamerEncoder(nn.Module):
 
     def _encode_images(self, obs: dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        Stack image keys along channel dim → CNNEncoder → (prod(bshape), cnn_flat_dim)
+        Stack image keys along channel dim -> CNNEncoder -> (prod(bshape), cnn_flat_dim)
         """
         imgs = [obs[k] for k in self.img_keys]
         
@@ -100,7 +100,7 @@ class DreamerEncoder(nn.Module):
 
     def _encode_vectors(self, obs: dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        Concat vector keys → optional symlog → MLP → (prod(bshape), units)
+        Concat vector keys -> optional symlog -> MLP -> (prod(bshape), units)
         """
         
         vecs = self._vec_cat(obs)

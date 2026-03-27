@@ -99,16 +99,7 @@ class ConvTransposeBlock(nn.Module):
 
 class CNNUpsampleStack(nn.Module):
     """
-    純 CNN upsample：(B, C_in, H_min, W_min) → (B, out_channels, H, W)
-    
-    n_stages 層 ConvTransposeBlock（每層 spatial ×2）
-    + 最後一層 upsample ×2 + out_conv + activation
-    
-    注意：depths 應該以「從深到淺」的順序傳入
-    例如 mults=(2,3,4,4), depth=64 → depths=[128,192,256,256]
-    rev_depths = [256,256,192,128]
-    blocks: 256→256, 256→192, 192→128  (3 blocks)
-    out_conv: 128 → out_channels  (最後 ×2 upsample)
+    純 CNN upsample: (B, C_in, H_min, W_min) -> (B, out_channels, H, W)
     """
     
     def __init__(
@@ -127,7 +118,7 @@ class CNNUpsampleStack(nn.Module):
         #     ConvTransposeBlock(rev_depths[i], rev_depths[i+1], ...)
         #     for i in range(len(rev_depths) - 1)
         # ])
-        # self.out_conv = ...  (rev_depths[-1] → out_channels, outscale init)
+        # self.out_conv = ...  (rev_depths[-1] -> out_channels, outscale init)
         # self.upsample_mode = upsample
         # self._out_act = out_act
         

@@ -20,18 +20,18 @@ class RSSM(nn.Module):
                  action_dim: int,
                  
                  # --- 維度 ---
-                 h_dim: int=4096,         # deterministic state dim (= 8 * model_dim)
-                 hidden: int=2048,        # MLP hidden units
-                 stoch: int=32,           # number of categorical latents
-                 classes: int=32,         # classes per latent (codes per latent = model_dim/16)
+                 h_dim: int=4096,           # deterministic state dim (= 8 * model_dim)
+                 hidden: int=2048,          # MLP hidden units
+                 stoch: int=32,             # category
+                 classes: int=32,           # class
                 
                 # --- Block GRU ---
-                blocks: int=8,           # block diagonal groups
-                dyn_layers: int=1,       # hidden layers inside _core
+                blocks: int=8,
+                dyn_layers: int=1,
                 
                 # --- prior / posterior MLP ---
-                prior_layers: int=2,     # prior MLP depth
-                post_layers: int=1,      # posterior MLP depth
+                prior_layers: int=2,
+                post_layers: int=1,
                 token_dim: int=1024,
         
                 # --- network config ---
@@ -88,11 +88,11 @@ class RSSM(nn.Module):
 
     def _build_prior(self, h_dim, hidden, stoch, classes, layers, norm, act, outscale):
         """
-        Prior MLP: deter → stoch logits
+        Prior MLP: deter -> stoch logits
         
         結構:
-        1. layers 個 NormedLinear(hidden → hidden)
-        2. Linear(hidden → stoch * classes)，用 outscale init
+        1. layers 個 NormedLinear(hidden -> hidden)
+        2. Linear(hidden -> stoch * classes)，用 outscale init
         """
         
         prior = nn.Sequential(*[
@@ -104,7 +104,7 @@ class RSSM(nn.Module):
     
     def _build_posterior(self, h_dim, hidden, stoch, classes, layers, token_dim, norm, act, outscale):
         """
-        Posterior MLP: concat(deter, tokens) → stoch logits
+        Posterior MLP: concat(deter, tokens) -> stoch logits
         """
         posterior = nn.Sequential(*[
             NormedLinear((h_dim + token_dim) if i == 0 else hidden, hidden, norm, act)
@@ -126,7 +126,7 @@ class RSSM(nn.Module):
     
     def get_feat(self, state: dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        state → feature vector for downstream heads (decoder, reward, continue)
+        state -> feature vector for downstream heads (decoder, reward, continue)
         
         return: (..., feat_dim) where feat_dim = h_dim + stoch * classes
         """
@@ -141,7 +141,7 @@ class RSSM(nn.Module):
         """
         Block GRU deterministic state transition
 
-        三條 input branch → concat → NormedBlockGRUCell
+        三條 input branch -> concat -> NormedBlockGRUCell
         """
         action = action / torch.maximum(torch.ones_like(action), torch.abs(action)).detach()
         
@@ -155,7 +155,7 @@ class RSSM(nn.Module):
     
     def _prior_logits(self, deter: torch.Tensor) -> torch.Tensor:
         """
-        deter → prior logits
+        deter -> prior logits
 
         return: (..., stoch, classes)
         """
@@ -164,7 +164,7 @@ class RSSM(nn.Module):
     
     def _posterior_logits(self, deter: torch.Tensor, token: torch.Tensor) -> torch.Tensor:
         """
-        (deter, token) → posterior logits
+        (deter, token) -> posterior logits
         
         return: (..., stoch, classes)
         """
@@ -274,7 +274,7 @@ class RSSM(nn.Module):
     def imagine(
         self,
         state: dict[str, torch.Tensor],                                 # 起始 state (B, ...)
-        policy: Callable[[torch.Tensor], torch.Tensor] | None = None,   # feat → action
+        policy: Callable[[torch.Tensor], torch.Tensor] | None = None,   # feat -> action
         horizon: int = 15,
         action_seq: torch.Tensor | None = None
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
