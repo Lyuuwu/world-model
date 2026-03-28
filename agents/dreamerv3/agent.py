@@ -38,18 +38,6 @@ class DreamerV3Agent(nn.Module):
             contdisc=config.contdisc,
             **wm_kwargs,
         )
-
-        if config.use_compile:
-            try:
-                self.world_model = torch.compile(
-                    self.world_model,
-                    mode=config.compile_mode,
-                    fullgraph=False,
-                )
-                print('[Agent] torch.compile enabled '
-                      f'(mode={config.compile_mode})')
-            except Exception as e:
-                print(f'[Agent] torch.compile failed: {e}, proceeding without')
  
         # --- Actor-Critic ---
         ac_kwargs = config.ac_kwargs or {}
@@ -148,7 +136,7 @@ class DreamerV3Agent(nn.Module):
         return action, new_state
  
     # --- Train step ---
- 
+    
     def train_step(
         self,
         data: dict[str, torch.Tensor],

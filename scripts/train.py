@@ -212,10 +212,10 @@ def main():
     print(f'  Compute: {config.get("compute_dtype", "bfloat16")}')
     print('=' * 60)
 
-    import json
-    print('[Config] Effective config:')
-    print(json.dumps(config.to_dict(), indent=2, default=str)[:2000])
-    print('...')
+    # import json
+    # print('[Config] Effective config:')
+    # print(json.dumps(config.to_dict(), indent=2, default=str)[:2000])
+    # print('...')
 
     # Bootstrap + Run
     components = bootstrap(config, device)

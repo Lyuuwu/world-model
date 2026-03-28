@@ -14,35 +14,40 @@ class RSSM(nn.Module):
     DreamerV3 Recurrent State-Space Model
     '''
 
-    def __init__(self,
+    def __init__(
+        self,
                  
-                 # --- action space ---
-                 action_dim: int,
-                 
-                 # --- 維度 ---
-                 h_dim: int=4096,           # deterministic state dim (= 8 * model_dim)
-                 hidden: int=2048,          # MLP hidden units
-                 stoch: int=32,             # category
-                 classes: int=32,           # class
-                
-                # --- Block GRU ---
-                blocks: int=8,
-                dyn_layers: int=1,
-                
-                # --- prior / posterior MLP ---
-                prior_layers: int=2,
-                post_layers: int=1,
-                token_dim: int=1024,
+        # --- action space ---
+        action_dim: int,
         
-                # --- network config ---
-                norm: str='rms',
-                act: str='silu',
+        # --- 維度 ---
+        h_dim: int=4096,           # deterministic state dim (= 8 * model_dim)
+        hidden: int=2048,          # MLP hidden units
+        stoch: int=32,             # category
+        classes: int=32,           # class
         
-                # --- distribution ---
-                unimix: float=0.01,
+        # --- Block GRU ---
+        blocks: int=8,
+        dyn_layers: int=1,
         
-                # --- init ---
-                outscale: float=1.0):
+        # --- prior / posterior MLP ---
+        prior_layers: int=2,
+        post_layers: int=1,
+        token_dim: int=1024,
+
+        # --- network config ---
+        norm: str='rms',
+        act: str='silu',
+
+        # --- distribution ---
+        unimix: float=0.01,
+
+        # --- init ---
+        outscale: float=1.0,
+        
+        # --- compile ---
+        rssm_compile: bool=False
+    ):
         super().__init__()
         
         self.h_dim = h_dim
@@ -65,6 +70,12 @@ class RSSM(nn.Module):
         
         # --- Posterior network ---
         self.posterior = self._build_posterior(h_dim, hidden, stoch, classes, post_layers, token_dim, norm, act, outscale)
+        
+        # --- compile ---
+        self.use_compile = rssm_compile
+        if rssm_compile:
+            self._compiled_observe = torch.compile(self._observe_fused, mode='reduce-overhead', fullgraph=True)
+            self._compiled_imagine = torch.compile(self._imagine_fused, mode='reduce-overhead', fullgraph=True)
     
     def _build_core(self, action_dim, h_dim, hidden, blocks, dyn_layers, norm, act):
         '''
@@ -173,6 +184,19 @@ class RSSM(nn.Module):
         x = self.posterior(x)
         return x.reshape(x.shape[:-1] + (self.stoch, self.classes))
     
+    def _observe_fused(self, deter, stoch, action, token):
+        h = self._core(deter, stoch, action)
+        x = torch.cat([h, token], dim=-1)
+        logit = self.posterior(x)
+        logit = logit.reshape(logit.shape[:-1] + (self.stoch, self.classes))
+        return h, logit
+    
+    def _imagine_fused(self, deter, stoch, action):
+        h = self._core(deter, stoch, action)
+        logit = self.prior(h)
+        logit = logit.reshape(logit.shape[:-1] + (self.stoch, self.classes))
+        return h, logit
+    
     def _make_dist(self, logits: torch.Tensor) -> StraightThroughCategorical:
         return StraightThroughCategorical(logits, unimix_ratio=self.unimix)
     
@@ -203,8 +227,9 @@ class RSSM(nn.Module):
         stoch = state['stoch'] * mask.unsqueeze(-1)
         action = action * mask
         
-        h = self._core(deter, stoch, action)
-        logit = self._posterior_logits(h, tokens)
+        observe = self._compiled_observe if self.use_compile else self._observe_fused
+        h, logit = observe(deter, stoch, action, tokens)
+        
         z = self._make_dist(logit).sample()
         
         next_state = {'deter': h, 'stoch': z}
@@ -261,8 +286,8 @@ class RSSM(nn.Module):
             - feat: {deter: (B, h_dim), stoch: (B, stoch, classes), logit: (B, stoch, classes)}
         '''
         
-        h = self._core(state['deter'], state['stoch'], action)
-        logit = self._prior_logits(h)
+        imagine = self._compiled_imagine if self.use_compile else self._imagine_fused
+        h, logit = imagine(state['deter'], state['stoch'], action)
         
         z = self._make_dist(logit).sample()
         

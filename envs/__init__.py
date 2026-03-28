@@ -88,7 +88,7 @@ def make_vec_env(
     base_seed: int = 0,
 ) -> Any:
     '''
-    構建 SyncVectorEnvWrapper（多個 env instance）。
+    構建 SyncVectorEnvWrapper (多個 env instance)
     每個 env 用不同的 seed: base_seed, base_seed+1, ...
     '''
     from .wrapper import SyncVectorEnvWrapper
@@ -102,7 +102,7 @@ def make_vec_env(
 
 def get_spaces(task: str, env_config: dict | None = None):
     '''
-    構建一個 temp env 來取得 obs_space / action_space, 然後關掉。
+    構建一個 temp env 來取得 obs_space / action_space, 然後關掉
     回傳 (obs_space_dict, num_actions)
     '''
     env = make_env(task, env_config, seed=0)

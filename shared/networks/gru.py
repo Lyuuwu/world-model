@@ -48,17 +48,6 @@ class NormedGRUCell(nn.Module):
 
 @register('sequence_model', 'block_gru')
 class NormedBlockGRUCell(nn.Module):
-    '''
-    Block-diagonal GRU cell，從 DreamerV3 RSSM 的 _core 抽出。
-
-    特點:
-    - input x 會 broadcast 到所有 block，與 block-grouped h concat
-    - 通過 NormedBlockLinear hidden layers
-    - 3-gate GRU：reset gate 乘在 candidate 上，update gate 偏移 -1（傾向保留舊 state）
-
-    Conforms to SequenceModelCell protocol: forward(x, h) -> h_next
-    '''
-
     def __init__(self,
                  input_dim: int,
                  hidden_dim: int,
@@ -178,45 +167,6 @@ class GRUSequence(nn.Module):
         h_last = torch.stack(h, dim=0)
 
         return h_seq, h_last
-
-class RecurrentStateModel(nn.Module):
-    def __init__(self,
-                 h_dim: int,
-                 z_dim: int,
-                 action_dim: int,
-                 seq_model_type: str = 'gru',
-                 mlp_units: int = 512,
-                 norm: str = 'rms',
-                 act: str = 'silu',
-                 **kwargs):
-        super().__init__()
-
-        from ..registry import build
-
-        input_dim = z_dim + action_dim
-        self.input_embedding = NormedLinear(input_dim, mlp_units, norm=norm, act=act)
-        self.cell = build('sequence_model', seq_model_type,
-                          input_dim=mlp_units, hidden_dim=h_dim, **kwargs)
-
-    def forward(self,
-                h_prev: torch.Tensor,
-                z_prev: torch.Tensor,
-                action: torch.Tensor) -> torch.Tensor:
-        '''
-        h_prev: (B, h_dim)
-        z_prev: (B, z_dim)
-        action: (B, action_dim)
-
-        return h_next: (B, h_dim)
-        '''
-
-        za = torch.cat([z_prev, action], dim=-1)
-        za = self.input_embedding(za)
-        h_next = self.cell(za, h_prev)
-        return h_next
-
-    def initial_state(self, batch_size: int, device: torch.device):
-        return self.cell.initial_state(batch_size, device)
 
 ''' Convience '''
 
