@@ -4,5 +4,5 @@ from .registry import (
 
 from .math_utils import (
     ReturnNorm,
-    symlog, symexp, twohot_symlog_encode,
+    symlog, symexp,
 )

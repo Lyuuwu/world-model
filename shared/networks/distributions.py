@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from .base import Output
 from ..registry import register
-from ..math_utils import symlog, symexp, twohot_symlog_encode
+from ..math_utils import symexp
 
 class Dist(Output):
     '''

@@ -10,38 +10,6 @@ def symexp(x: torch.Tensor) -> torch.Tensor:
 def rms(x: torch.Tensor) -> torch.Tensor:
     return (x.square().mean(dim=-1, keepdim=True)).sqrt().to(x.dtype)
 
-def twohot_symlog_encode(x: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
-    '''
-    將連續 scalar 編碼為 twohot vector
-
-    x:    (...) 任意 shape 的連續值 \n
-    bins: (B,) 1-D sorted bin 位置
-
-    return: (..., B) twohot encoded vector
-    '''
-
-    # 轉換到 symlog 的空間
-    symlog_x = symlog(x)
-    symlog_bins = symlog(bins)
-    
-    # 找 k 的位置 (binL 的位置)
-    k = torch.searchsorted(symlog_bins, symlog_x) - 1
-    k = k.clamp(0, len(bins) - 2)
-    
-    # 計算 weight
-    w_upper = (symlog_x - symlog_bins[k]) / (symlog_bins[k+1] - symlog_bins[k])
-    w_upper = w_upper.clamp(0, 1)
-    w_lower = 1 - w_upper
-    
-    # 建立 result = zeros(..., B)
-    res = torch.zeros(*x.shape, len(bins), device=x.device, dtype=x.dtype)
-    
-    # scatter 填入 w_lower 到 index k, w_upper 到 index k+1
-    res.scatter_(-1, k.unsqueeze(-1), w_lower.unsqueeze(-1))
-    res.scatter_(-1, (k+1).unsqueeze(-1), w_upper.unsqueeze(-1))
-    
-    return res
-
 class ReturnNorm(nn.Module):
     
     def __init__(self,
