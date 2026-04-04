@@ -1,4 +1,4 @@
-from .base import Output
+from .networks.base import Output
 from .distributions import Dist
 
 import torch

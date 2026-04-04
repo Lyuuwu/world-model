@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 
 from shared.obs_spec import ObsSpec
-from shared.networks.mlp import MLP, LinearHead, MLPHead
-from shared.networks.distributions import BinaryDist, TwoHotCategorical, build_symexp_bins
+from shared.networks.mlp import MLP, LinearHead
+from shared.distributions import BinaryDist, TwoHotCategorical, build_symexp_bins
 from shared.registry import register
 
 from .types import WorldModelOutputs, ImaginedTrajectory

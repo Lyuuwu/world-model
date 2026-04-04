@@ -30,16 +30,3 @@ from .sequence_model import (
     SequenceModelCell, SequenceModelSeq,
     Cell2SeqWrapper,
 )
-
-# --- distributions ---
-from .distributions import (
-    Dist,
-    CategoricalDist,
-    StraightThroughCategorical,
-    TwoHotCategorical, build_symexp_bins,
-)
-
-# --- losses ---
-from .losses import (
-    MSE, Huber, Agg
-)

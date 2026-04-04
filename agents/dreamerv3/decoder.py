@@ -12,8 +12,8 @@ from shared.networks.mlp import (
     get_act
 )
 from shared.networks.cnn import CNNUpsampleStack, SpatialNorm
-from shared.networks.distributions import CategoricalDist
-from shared.networks.losses import MSE, Agg
+from shared.distributions import CategoricalDist
+from shared.losses import MSE, Agg
 
 class ImageSpatialProjection(nn.Module):
     '''

@@ -7,10 +7,10 @@ import copy
 
 from shared.math_utils import Normalizer
 from shared.networks.mlp import MLP, LinearHead
-from shared.networks.distributions import (
+from shared.distributions import (
     StraightThroughCategorical, TwoHotCategorical, NormalDist, build_symexp_bins
 )
-from shared.networks.losses import Agg
+from shared.losses import Agg
 from shared.registry import register
 
 from .types import ImaginedTrajectory

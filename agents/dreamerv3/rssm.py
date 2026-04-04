@@ -6,7 +6,7 @@ import torch.nn as nn
 from shared.registry import register
 from shared.networks.mlp import NormedLinear, LinearHead
 from shared.networks.gru import NormedBlockGRUCell
-from shared.networks.distributions import StraightThroughCategorical
+from shared.distributions import StraightThroughCategorical
 
 @register('rssm', 'dreamerv3')
 class RSSM(nn.Module):
