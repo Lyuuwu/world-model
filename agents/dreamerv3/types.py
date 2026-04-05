@@ -13,15 +13,22 @@ class WorldModelOutputs:
     
 @dataclass
 class ImaginedTrajectory:
-    ''' return of imagine() '''
+    '''
+    return of imagine()
     
-    feat: torch.Tensor      # (B*K, H+1, feat_dim)
-    reward: torch.Tensor    # (B*K, H+1)            predicted reward (symexp)
-    cont: torch.Tensor      # (B*K, H+1)            predicted continuation prob
-    action: torch.Tensor    # (B*K, H+1, action_dim)
+    - feat: (B*K, H+1, feat_dim)
+    - reward: (B*K, H+1)
+    - cont: (B*K, H+1)
+    - action: (B*K, H+1, action_dim)
+    '''
+    
+    feat: torch.Tensor
+    reward: torch.Tensor
+    cont: torch.Tensor
+    action: torch.Tensor
 
 @dataclass
-class DreamerV3Config:
+class DreamerConfig:
     # --- optimizer ---
     lr: float = 4e-5
     agc: float = 0.3

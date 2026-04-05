@@ -3,9 +3,8 @@ import time
 import numpy as np
 import torch
  
-from shared.trainer_base import TrainerBase
- 
- 
+from .trainer_base import TrainerBase
+
 class InterleavedTrainer(TrainerBase):
     '''
     Interleaved collect-train loop:
@@ -19,7 +18,7 @@ class InterleavedTrainer(TrainerBase):
     '''
  
     def _main_loop(self) -> None:
-        cfg = self.config
+        cfg = self.config['agent_config']
  
         total_steps    = cfg.total_env_steps
         seed_steps     = cfg.get('seed_steps', 1024)

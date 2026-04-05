@@ -1,5 +1,7 @@
 from typing import Optional
 
+from .base import BufferBase
+
 import numpy as np
 import torch
 
@@ -41,7 +43,7 @@ class Episode:
             raise RuntimeError('Use len on finalized data dict, not Episode')
         return len(self._steps)
     
-class EpisodeReplayBuffer:
+class EpisodeReplayBuffer(BufferBase):
     def __init__(
         self,
         capacity: int=5000000,

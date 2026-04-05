@@ -27,6 +27,7 @@ class RSSM(nn.Module):
         classes: int=32,           # class
         
         # --- Block GRU ---
+        seq_type: str = 'block_gru',    # tmp: 暫時用不到
         blocks: int=8,
         dyn_layers: int=1,
         
@@ -46,7 +47,8 @@ class RSSM(nn.Module):
         outscale: float=1.0,
         
         # --- compile ---
-        rssm_compile: bool=False
+        use_compile: bool=False,
+        compile_mode: str = 'reduce-overhead'
     ):
         super().__init__()
         
@@ -72,10 +74,10 @@ class RSSM(nn.Module):
         self.posterior = self._build_posterior(h_dim, hidden, stoch, classes, post_layers, token_dim, norm, act, outscale)
         
         # --- compile ---
-        self.use_compile = rssm_compile
-        if rssm_compile:
-            self._compiled_observe = torch.compile(self._observe_fused, mode='reduce-overhead', fullgraph=True)
-            self._compiled_imagine = torch.compile(self._imagine_fused, mode='reduce-overhead', fullgraph=True)
+        self.use_compile = use_compile
+        if use_compile:
+            self._compiled_observe = torch.compile(self._observe_fused, mode=compile_mode, fullgraph=True)
+            self._compiled_imagine = torch.compile(self._imagine_fused, mode=compile_mode, fullgraph=True)
     
     def _build_core(self, action_dim, h_dim, hidden, blocks, dyn_layers, norm, act):
         '''

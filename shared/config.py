@@ -3,6 +3,8 @@ import yaml
 from pathlib import Path
 from typing import Any
 
+from . import tool
+
 def deep_update(base: dict, override: dict) -> dict:
     ''' 遞迴合併 override 到 base '''
     for k, v in override.items():
@@ -56,6 +58,33 @@ def parse_overrides(override_str: str | None) -> dict:
         d[keys[-1]] = _parse_value(val.strip())
     return result
 
+# def _load_config(path: Path, module_name: str, mode: str) -> dict:
+#     if not path.exists():
+#         raise FileNotFoundError(f'config file does not exist: {path}')
+    
+#     module = tool.import_module(module_name, path)
+    
+#     try:
+#         func = getattr(module, mode)
+#     except AttributeError:
+#         raise ValueError(f'module: "{path.name}" does not include: "{mode}"')
+    
+#     if not callable(func):
+#         raise TypeError(f'"{mode}" is in the module, but not callable')
+    
+#     cfg = func()
+#     if not hasattr(cfg, 'to_dict'):
+#         raise ValueError(f'Config does not has attribute: to_dict()')
+#     if not callable(cfg.to_dict):
+#         raise TypeError(f'Config to_dict is not callable')
+    
+#     return cfg.to_dict()
+
+def _load_config(module, mode):
+    func = getattr(module, mode)
+    cfg = func()
+    return cfg
+
 def _load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -79,25 +108,25 @@ def compose_config(
         # 假設從 scripts/ 執行，project root 是上一層
         project_root = Path(__file__).resolve().parent.parent
  
-    # --- Layer 1: global ---
-    config = _load_yaml(project_root / 'configs' / 'global.yaml')
+    config = {}
+    
+    # --- agent ---
+    agent_dir = project_root / 'agents' / agent
+    profile_path = agent_dir / 'profiles.py'
+    if not profile_path.exists():
+        raise FileNotFoundError(f'profile file does not exist: {profile_path}')
+    
+    module_name = f'agents.{agent}.profiles'
+    profile_module = tool.import_module(module_name)
+    profile_mode = profile if profile else 'default'
+    agent_cfg = _load_config(profile_module, profile_mode)
+    config['agent_config'] = agent_cfg
  
-    # --- Layer 2: agent default ---
-    agent_dir = project_root / 'agents' / agent / 'configs'
-    deep_update(config, _load_yaml(agent_dir / 'default.yaml'))
-
-    # --- Layer 2.5: profile ---
-    if profile:
-        profile_path = agent_dir / f'{profile}.yaml'
-        if not profile_path.exists():
-            raise FileNotFoundError(f'Profile not found: {profile_path}')
-        deep_update(config, _load_yaml(profile_path))
- 
-    # --- Layer 3: task domain ---
+    # --- task domain ---
     domain = task.split('_', 1)[0]  # "atari_pong" -> "atari"
     deep_update(config, _load_yaml(project_root / 'configs' / f'{domain}.yaml'))
  
-    # --- Layer 4: CLI overrides ---
+    # --- CLI overrides ---
     deep_update(config, parse_overrides(override_str))
  
     # --- 注入 meta fields ---

@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn as nn
 
-from shared.obs_spec import ObsSpec
 from shared.networks.mlp import MLP, LinearHead
 from shared.distributions import BinaryDist, TwoHotCategorical, build_symexp_bins
 from shared.registry import register
@@ -84,39 +83,12 @@ class ContinueHead(nn.Module):
 class DreamerWorldModel(nn.Module):
     
     def __init__(
-        self,
-        obs_space: dict[str, ObsSpec],
-        action_dim: int,
-        
-        # --- RSSM ---
-        h_dim: int=4096,
-        stoch: int=32,
-        classes: int=32,
-        
-        rssm_blocks: int=8,
-        rssm_hidden: int=2048,
-        
-        # --- Encoder ---
-        enc_depth: int=64,
-        enc_mults: tuple[int, ...]=(2, 3, 4, 4),
-        enc_kernel: int=5,
-        enc_layers: int=3,
-        enc_symlog: bool=True,
-        img_size: tuple[int, int]=(64, 64),
-        
-        # --- Decoder ---
-        dec_depth: int=64,
-        dec_mults: tuple[int, ...]=(2, 3, 4, 4),
-        dec_kernel: int=5,
-        dec_layers: int=3,
-        dec_symlog: bool=True,
-        
-        # --- MLP ---
-        units: int=1024,
-        
-        # --- Head ---
-        head_layers: int=5,
-        reward_bins: int=255,
+        self,        
+        encoder: nn.Module,
+        decoder: nn.Module,
+        rssm: nn.Module,
+        reward_head: nn.Module,
+        continue_head: nn.Module,
         
         # --- Loss ---
         free_nats: float=1.0,
@@ -124,95 +96,20 @@ class DreamerWorldModel(nn.Module):
         
         # --- Continue ---
         contdisc: bool=True,
-        horizon: int=333,
-        
-        # --- Network ---
-        norm: str='rms',
-        act: str='silu',
-        outscale: float=1.0,
-        
-        # --- outscale ---
-        rewhead_scale: float=0.0,
-        conhead_scale: float=1.0,
-        
-        **kwargs
+        horizon: int=333
     ):
         super().__init__()
         
-        self.obs_space = obs_space
-        self.action_dim = action_dim
         self.free_nats = free_nats
         self.reward_grad = reward_grad
         self.contdisc = contdisc
         self.horizon = horizon
         
-        exclude = ('is_first', 'is_last', 'is_terminal', 'reward')
-        self.enc_space = {k: v for k, v in obs_space.items() if k not in exclude}
-        self.dec_space = {k: v for k, v in obs_space.items() if k not in exclude}
-        
-        self.encoder = DreamerEncoder(
-            obs_space=self.enc_space,
-            depth=enc_depth,
-            mults=enc_mults,
-            img_size=img_size,
-            kernel=enc_kernel,
-            units=units,
-            mlp_layers=enc_layers,
-            symlog_vecs=enc_symlog,
-            norm=norm,
-            act=act
-        )
-        
-        self.rssm = RSSM(
-            action_dim=action_dim,
-            h_dim=h_dim,
-            hidden=rssm_hidden,
-            stoch=stoch,
-            classes=classes,
-            blocks=rssm_blocks,
-            token_dim=self.encoder.token_dim,
-            norm=norm,
-            act=act,
-            outscale=outscale
-        )
-        
-        feat_dim = self.rssm.feat_dim
-        
-        self.decoder = DreamerDecoder(
-            obs_space=self.dec_space,
-            h_dim=h_dim,
-            stoch=stoch,
-            classes=classes,
-            img_size=img_size,
-            depth=dec_depth,
-            mults=dec_mults,
-            kernel=dec_kernel,
-            units=units,
-            mlp_layers=dec_layers,
-            symlog_vecs=dec_symlog,
-            norm=norm,
-            act=act,
-            outscale=outscale
-        )
-        
-        self.reward_head = RewardHead(
-            feat_dim=feat_dim,
-            units=units,
-            layers=head_layers,
-            bins=reward_bins,
-            norm=norm,
-            act=act,
-            outscale=rewhead_scale
-        )
-        
-        self.continue_head = ContinueHead(
-            feat_dim=feat_dim,
-            units=units,
-            layers=head_layers,
-            norm=norm,
-            act=act,
-            outscale=conhead_scale
-        )
+        self.encoder = encoder
+        self.decoder = decoder
+        self.rssm = rssm
+        self.reward_head = reward_head
+        self.continue_head = continue_head
             
     @property
     def feat_dim(self) -> int:
@@ -221,8 +118,8 @@ class DreamerWorldModel(nn.Module):
     def _preprocess_target(self, obs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         
         targets = {}
-        for key in self.dec_space:
-            space = self.dec_space[key]
+        for key in self.decoder.obs_space:
+            space = self.decoder.obs_space_space[key]
             value = obs[key]
             
             if space.is_image:

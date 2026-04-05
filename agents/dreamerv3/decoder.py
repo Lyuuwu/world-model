@@ -108,7 +108,7 @@ class VectorDecoderHead(nn.Module):
         layers: int = 3,
         norm: str = 'rms',
         act: str = 'silu',
-        symlog: bool = True,
+        apply_symlog: bool = True,
         outscale: float = 1.0,
     ):
         '''
@@ -118,7 +118,7 @@ class VectorDecoderHead(nn.Module):
         '''
         super().__init__()
         
-        self._symlog = symlog
+        self._symlog = apply_symlog
         self.mlp = MLP(feat_dim, units, layers, norm, act)
         
         self.heads = nn.ModuleDict()
@@ -271,15 +271,13 @@ class DreamerDecoder(nn.Module):
 
         # --- Vector decoder ---
         units: int = 1024,
-        mlp_layers: int = 3,
-        symlog_vecs: bool = True,
+        layers: int = 3,
+        apply_symlog: bool = True,
 
         # --- Shared ---
         norm: str = 'rms',
         act: str = 'silu',
         outscale: float = 1.0,
-
-        **kwargs,
     ):
         super().__init__()
 
@@ -301,7 +299,7 @@ class DreamerDecoder(nn.Module):
 
         if self.vec_keys:
             vec_space = {k: obs_space[k] for k in self.vec_keys}
-            self.vec_decoder = VectorDecoderHead(feat_dim, vec_space, units, mlp_layers, norm, act, symlog_vecs, outscale)
+            self.vec_decoder = VectorDecoderHead(feat_dim, vec_space, units, layers, norm, act, apply_symlog, outscale)
 
     def forward(
         self,
@@ -366,3 +364,7 @@ class DreamerDecoder(nn.Module):
                 (discrete: Categorical | continuous: MSE)
             '''
             ...
+            
+    @property
+    def obs_spec(self):
+        return self.obs_space

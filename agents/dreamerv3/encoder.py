@@ -36,8 +36,8 @@ class DreamerEncoder(nn.Module):
 
         # --- MLP path ---
         units: int = 1024,
-        mlp_layers: int = 3,
-        symlog_vecs: bool = True,               # apply symlog to continuous vector obs
+        layers: int = 3,
+        apply_symlog: bool = True,               # apply symlog to continuous vector obs
 
         # --- shared ---
         norm: str = 'rms',
@@ -46,7 +46,7 @@ class DreamerEncoder(nn.Module):
         super().__init__()
 
         self.obs_space = obs_space
-        self.symlog_vecs = symlog_vecs
+        self.apply_symlog = apply_symlog
         self.img_size = img_size
 
         self.img_keys: list[str] = sorted([k for k, s in obs_space.items() if s.is_image])
@@ -61,7 +61,7 @@ class DreamerEncoder(nn.Module):
         vec_out_dim = 0
         if self.vec_keys:
             vec_in = self._cal_vec_in()
-            self.vec_mlp = MLP(vec_in, units, mlp_layers, norm, act)
+            self.vec_mlp = MLP(vec_in, units, layers, norm, act)
             vec_out_dim = units
 
         self._token_dim = cnn_flat_dim + vec_out_dim
@@ -118,7 +118,7 @@ class DreamerEncoder(nn.Module):
             if space.discrete:
                 x = F.one_hot(vec, space.classes).float()
             else:
-                x = symlog(vec.float()) if self.symlog_vecs else vec.float()
+                x = symlog(vec.float()) if self.apply_symlog else vec.float()
             
             x = x.flatten(1)
             res.append(x)

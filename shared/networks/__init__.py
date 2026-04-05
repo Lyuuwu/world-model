@@ -1,8 +1,3 @@
-# --- base ---
-from .base import (
-    Output
-)
-
 # --- mlp ---
 from .mlp import (
     get_norm, get_act,

@@ -1,10 +1,9 @@
 import math
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
-from .networks.base import Output
+from .base import Output
 from .registry import register
 from .math_utils import symexp
 

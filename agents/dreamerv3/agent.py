@@ -2,22 +2,24 @@ from typing import Any
  
 import torch
 import torch.nn as nn
-import numpy as np
- 
+
 from shared.registry import register
+from shared.base import AgentBase
 from shared.optimizer import LaProp
  
-from .types import DreamerV3Config, WorldModelOutputs, ImaginedTrajectory
+from .types import DreamerConfig, WorldModelOutputs, ImaginedTrajectory
 from .world_model import DreamerWorldModel
 from .actor_critic import DreamerActorCritic
  
 @register('agent', 'dreamerv3')
-class DreamerV3Agent(nn.Module):
+class DreamerAgent(AgentBase):
     def __init__(
         self,
         obs_space: dict[str, Any],
         action_dim: int,
-        config: DreamerV3Config,
+        world_model: nn.Module,
+        actor_critic: nn.Module,
+        config: DreamerConfig,
     ):
         super().__init__()
  
@@ -26,29 +28,10 @@ class DreamerV3Agent(nn.Module):
         self.config = config
  
         # --- World Model ---
-        wm_kwargs = config.wm_kwargs or {}
- 
-        wm_kwargs.setdefault('reward_grad', config.reward_grad)
- 
-        self.world_model = DreamerWorldModel(
-            obs_space=obs_space,
-            action_dim=action_dim,
-            horizon=config.horizon,
-            contdisc=config.contdisc,
-            **wm_kwargs,
-        )
+        self.world_model = world_model
  
         # --- Actor-Critic ---
-        ac_kwargs = config.ac_kwargs or {}
- 
-        self.actor_critic = DreamerActorCritic(
-            feat_dim=self.world_model.feat_dim,
-            action_dim=action_dim,
-            discrete=config.discrete,
-            horizon=config.horizon,
-            contdisc=config.contdisc,
-            **ac_kwargs,
-        )
+        self.actor_critic = actor_critic
  
         # --- Loss scales ---
         self.scales = self._build_loss_scales(config, obs_space)
@@ -66,10 +49,10 @@ class DreamerV3Agent(nn.Module):
  
     def _build_loss_scales(
         self,
-        config: DreamerV3Config,
+        config: DreamerConfig,
         obs_space: dict[str, Any],
     ) -> dict[str, float]:
-        raw = config.loss_scales or {
+        raw = config.loss_scales.to_dict() or {
             'dyn': 1.0, 'rep': 0.1, 'rec': 1.0,
             'rew': 1.0, 'con': 1.0,
             'policy': 1.0, 'value': 1.0, 'repval': 0.3,

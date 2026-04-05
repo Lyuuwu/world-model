@@ -5,6 +5,8 @@ from datetime import datetime
 
 import torch
 
+from shared.config import compose_config, Config
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -96,7 +98,7 @@ def get_trainer_class(trainer_type: str):
         )
     return _TRAINER_MAP[trainer_type]
 
-def bootstrap(config, device: torch.device) -> dict:
+def bootstrap(config: Config, device: torch.device) -> dict:
     from shared.trainer_base import seed_everything
     from shared.logger import JSONLLogger
     from shared.agent_builder import build_agent
@@ -125,7 +127,7 @@ def bootstrap(config, device: torch.device) -> dict:
 
     # 4. Agent
     _import_agent(agent_name)
-    agent = build_agent(agent_name, obs_space, num_actions, config)
+    agent = build_agent(agent_name, obs_space, num_actions, config.get('agent_config'))
     agent = agent.to(device)
     param_count = sum(p.numel() for p in agent.parameters())
     print(f'[Bootstrap] Agent: {agent_name}, params={param_count:,}')
@@ -180,8 +182,6 @@ def _extract_dict(val) -> dict:
 
 def main():
     args = parse_args()
-
-    from shared.config import compose_config, Config
 
     config_dict = compose_config(
         agent=args.agent,

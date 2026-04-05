@@ -6,10 +6,10 @@ from typing import Any
 
 import numpy as np
 import torch
-import torch.nn as nn
 
-from shared.logger import JSONLLogger
-from shared.config import Config
+from .base import AgentBase, BufferBase
+from .logger import JSONLLogger
+from .config import Config
 
 def seed_everything(seed: int) -> None:
     random.seed(seed)
@@ -21,10 +21,10 @@ def seed_everything(seed: int) -> None:
 class TrainerBase(ABC):
     def __init__(
         self,
-        agent: nn.Module,
+        agent: AgentBase,
         vec_env: Any,
         eval_env: Any,
-        buffer: Any,
+        buffer: BufferBase,
         logger: JSONLLogger,
         config: Config,
         device: torch.device,
@@ -122,7 +122,6 @@ class TrainerBase(ABC):
             obs_list = next_obs_list
         
         print(f'[Prefill] Done. Buffer has {self.buffer.total_steps} steps')
-        
     
     @torch.no_grad()
     def collect_step(
@@ -160,9 +159,7 @@ class TrainerBase(ABC):
                     reward = float(rews[i]),
                     is_first = bool(obs_list[i].get('is_first', False)),
                     is_last = True,
-                    is_terminal = bool(
-                        infos[i].get('real_terminated', terms[i])
-                    )
+                    is_terminal = bool(infos[i].get('real_terminated', terms[i]))
                 )
             else:
                 self.buffer.add_step(
