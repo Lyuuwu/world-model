@@ -347,7 +347,7 @@ class DreamerActorCritic(nn.Module):
         ent = policy_dist.entropy()[:, :-1]
 
         policy_loss = weight[:, :-1].detach() * -(
-            logpi * adv_normed.detach() + self.actent * torch.sum(ent)
+            logpi * adv_normed.detach() + self.actent * ent
         )
 
         # --- Value Loss ---

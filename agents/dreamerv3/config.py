@@ -132,7 +132,7 @@ class ACConfig(BaseConfig):
     valnorm_enable: bool = False
     advnorm_enable: bool = False
     
-    policy_scale: float = 1.0,
+    policy_scale: float = 1.0
     value_scale: float = 1.0
 
 @dataclass
