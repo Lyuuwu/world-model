@@ -57,12 +57,20 @@ def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
         decoder = decoder,
         rssm = rssm,
         reward_head = rewhead,
-        continue_head = conthead
+        continue_head = conthead,
+        
+        free_nats = cfg.wm.free_nats,
+        reward_grad = cfg.wm.reward_grad,
+        
+        contdisc = cfg.contdisc,
+        horizon = cfg.horizon
     )
     
     actor_critic = DreamerActorCritic(
         feat_dim = feat_dim,
         action_dim = action_dim,
+        contdisc = cfg.contdisc,
+        discrete = cfg.discrete,
         **cfg.ac.to_dict()
     )
     

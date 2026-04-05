@@ -235,8 +235,6 @@ class DreamerActorCritic(nn.Module):
         # --- loss scales ---
         policy_scale: float=1.0,
         value_scale: float=1.0,
-        
-        **kwargs
     ):
         super().__init__()
         
@@ -349,7 +347,7 @@ class DreamerActorCritic(nn.Module):
         ent = policy_dist.entropy()[:, :-1]
 
         policy_loss = weight[:, :-1].detach() * -(
-            logpi * adv_normed.detach() + self.actent * ent
+            logpi * adv_normed.detach() + self.actent * torch.sum(ent)
         )
 
         # --- Value Loss ---

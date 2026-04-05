@@ -12,7 +12,7 @@ class EncConfig(BaseConfig):
     apply_symlog: bool = True
     
     act: str = 'silu'
-    norm = 'rms'
+    norm: str = 'rms'
 
 @dataclass
 class DecConfig(BaseConfig):
@@ -90,11 +90,11 @@ class WMConfig(BaseConfig):
     conthead: ContHeadConfig = field(default_factory=ContHeadConfig)
     
     act: str = 'silu'
-    nomr: str = 'rms'
+    norm: str = 'rms'
     outscale: float = 1.0
     
     free_nats: float = 1.0
-    reward_grd: bool = True
+    reward_grad: bool = True
     
 @dataclass
 class ACConfig(BaseConfig):
@@ -106,7 +106,7 @@ class ACConfig(BaseConfig):
     norm: str = 'rms'
     
     # --- Policy ---
-    policy_outscale: float = 1.0
+    policy_outscale: float = 0.01
     policy_unimix: float = 0.01
     actent: float = 3e-4
     
@@ -115,9 +115,9 @@ class ACConfig(BaseConfig):
     
     # --- Value ---
     value_outscale: float = 0.0
-    slow_decy: float = 0.98
+    slow_decay: float = 0.98
     slowreg: float = 1.0
-    slowtar: bool = True
+    slowtar: bool = False
 
     # --- Returns ---
     lam: float = 0.95
@@ -131,6 +131,9 @@ class ACConfig(BaseConfig):
     advnorm_decay: float = 0.99
     valnorm_enable: bool = False
     advnorm_enable: bool = False
+    
+    policy_scale: float = 1.0,
+    value_scale: float = 1.0
 
 @dataclass
 class LossScales(BaseConfig):
@@ -144,7 +147,7 @@ class LossScales(BaseConfig):
     repval: float = 0.3
 
 @dataclass
-class DreamerConfig(GlobalConfig):
+class DreamerConfig(GlobalConfig):    
     # --- optimizer ---
     lr: float = 4e-5
     agc: float = 0.3
@@ -165,11 +168,10 @@ class DreamerConfig(GlobalConfig):
     
     # --- gradient flow ---
     ac_grads: bool = False
-    reward_grad: bool = False
     
     # --- replay value loss ---
-    repval_loss: bool = False
-    repval_grad: bool = False
+    repval_loss: bool = True
+    repval_grad: bool = True
     
     wm: WMConfig = field(default_factory=WMConfig)
     ac: ACConfig = field(default_factory=ACConfig)

@@ -35,6 +35,7 @@ def _build_atari(game: str, env_config: dict, seed: int | None = None) -> gym.En
 
 _DOMAIN_BUILDERS: dict[str, Callable] = {
     'atari': _build_atari,
+    'atari100k': _build_atari
 }
 
 def parse_task(task: str) -> tuple[str, str]:
@@ -71,7 +72,6 @@ def make_env(
     env_config = env_config or {}
     return _DOMAIN_BUILDERS[domain](game, env_config, seed)
 
-
 def make_env_fn(
     task: str,
     env_config: dict | None = None,
@@ -79,7 +79,6 @@ def make_env_fn(
 ) -> Callable[[], gym.Env]:
     ''' 回傳一個 callable，呼叫時才構建 env（用於 VecEnv） '''
     return partial(make_env, task=task, env_config=env_config, seed=seed)
-
 
 def make_vec_env(
     task: str,
@@ -98,7 +97,6 @@ def make_vec_env(
         for i in range(num_envs)
     ]
     return SyncVectorEnvWrapper(env_fns)
-
 
 def get_spaces(task: str, env_config: dict | None = None):
     '''

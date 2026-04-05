@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Protocol
-from dataclasses import asdict
+from dataclasses import dataclass, asdict
+import copy
 
 import numpy as np
 import torch
@@ -61,7 +62,19 @@ class AgentBase(ABC, nn.Module):
     
     @abstractmethod
     def train_step(self, data, device_type='cuda', compute_dtype=torch.bfloat16) -> dict[str, float]: ...
-    
+
+@dataclass
 class BaseConfig:
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def get(self, key: str, default=None):
+        return getattr(self, key, default)
+    
+    def override(self, **kwargs) -> 'BaseConfig':
+        c = copy.deepcopy(self)
+        for k, v in kwargs.items():
+            if not hasattr(c, k):
+                raise ValueError(f'Unknown config key: {k}')
+            setattr(c, k, v)
+        return c

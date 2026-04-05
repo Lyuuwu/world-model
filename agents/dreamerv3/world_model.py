@@ -92,7 +92,7 @@ class DreamerWorldModel(nn.Module):
         
         # --- Loss ---
         free_nats: float=1.0,
-        reward_grad: bool=False,
+        reward_grad: bool=True,
         
         # --- Continue ---
         contdisc: bool=True,
@@ -119,7 +119,7 @@ class DreamerWorldModel(nn.Module):
         
         targets = {}
         for key in self.decoder.obs_space:
-            space = self.decoder.obs_space_space[key]
+            space = self.decoder.obs_space[key]
             value = obs[key]
             
             if space.is_image:

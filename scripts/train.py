@@ -98,57 +98,57 @@ def get_trainer_class(trainer_type: str):
         )
     return _TRAINER_MAP[trainer_type]
 
-def bootstrap(config: Config, device: torch.device) -> dict:
+def bootstrap(agent_cfg, env_cfg, device: torch.device) -> dict:
     from shared.trainer_base import seed_everything
     from shared.logger import JSONLLogger
     from shared.agent_builder import build_agent
     from shared.replay_buffer import EpisodeReplayBuffer
     from envs import make_vec_env, make_env, get_spaces
 
-    agent_name = config.agent
-    task = config.task
-    seed = config.seed
+    agent_name = agent_cfg.agent
+    task = agent_cfg.task
+    seed = agent_cfg.seed
 
     # 1. Seed
     seed_everything(seed)
     print(f'[Bootstrap] seed={seed}, device={device}')
 
     # 2. Environment
-    env_config = _extract_dict(config.get('env', {}))
-    num_envs = config.get('num_envs', 1)
-    vec_env = make_vec_env(task, num_envs, env_config, base_seed=seed)
-    eval_env = make_env(task, env_config, seed=seed + 1000)
+    env_dict = env_cfg.to_dict()
+    num_envs = agent_cfg.num_envs
+    vec_env = make_vec_env(task, num_envs, env_dict, base_seed=seed)
+    eval_env = make_env(task, env_dict, seed=seed + 1000)
     print(f'[Bootstrap] task={task}, num_envs={num_envs}')
 
     # 3. Spaces
-    obs_space, num_actions = get_spaces(task, env_config)
+    obs_space, num_actions = get_spaces(task, env_dict)
     print(f'[Bootstrap] obs_space keys={list(obs_space.keys())}, '
           f'num_actions={num_actions}')
 
     # 4. Agent
     _import_agent(agent_name)
-    agent = build_agent(agent_name, obs_space, num_actions, config.get('agent_config'))
+    agent = build_agent(agent_name, obs_space, num_actions, agent_cfg)
     agent = agent.to(device)
     param_count = sum(p.numel() for p in agent.parameters())
     print(f'[Bootstrap] Agent: {agent_name}, params={param_count:,}')
 
     # 5. Buffer
     buffer = EpisodeReplayBuffer(
-        capacity=config.get('buffer_capacity', 1000000),
-        min_episode_len=config.get('min_episode_len', 2),
+        capacity=agent_cfg.get('buffer_capacity', 1000000),
+        min_episode_len=agent_cfg.get('min_episode_len', 2),
         device=str(device),
     )
 
     # 6. Logger
     time = datetime.now().strftime('%Y-%m-%d_%H%M%S')
     run_name = f'{agent_name}_{task}_s{seed}_{time}'
-    log_dir = Path(config.get('log_dir', 'runs')) / run_name
+    log_dir = Path(agent_cfg.get('log_dir', 'runs')) / run_name
     logger = JSONLLogger(str(log_dir))
-    logger.save_config(config.to_dict())
+    logger.save_config(agent_cfg.to_dict())
     print(f'[Bootstrap] Logging to {log_dir}')
 
     # 7. Trainer
-    trainer_type = config.get('trainer', 'interleaved')
+    trainer_type = agent_cfg.get('trainer', 'interleaved')
     TrainerClass = get_trainer_class(trainer_type)
     trainer = TrainerClass(
         agent=agent,
@@ -156,8 +156,9 @@ def bootstrap(config: Config, device: torch.device) -> dict:
         eval_env=eval_env,
         buffer=buffer,
         logger=logger,
-        config=config,
+        config=agent_cfg,
         device=device,
+        use_checkpoint=agent_cfg.get('use_checkpoint', False)
     )
 
     return {
@@ -183,7 +184,7 @@ def _extract_dict(val) -> dict:
 def main():
     args = parse_args()
 
-    config_dict = compose_config(
+    agent_cfg, env_cfg = compose_config(
         agent=args.agent,
         task=args.task,
         override_str=args.override,
@@ -192,14 +193,14 @@ def main():
     )
 
     # CLI args first
-    config_dict['seed'] = args.seed
+    # config_dict['seed'] = args.seed
+    agent_cfg = agent_cfg.override(seed=args.seed)
     if args.resume:
-        config_dict['resume'] = args.resume
+        agent_cfg = agent_cfg.override(resume=args.resume)
     if args.device != 'auto':
-        config_dict['device'] = args.device
+        agent_cfg = agent_cfg.override(device=args.device)
 
-    config = Config(config_dict)
-    device = resolve_device(config.get('device', 'auto'))
+    device = resolve_device(agent_cfg.get('device', 'auto'))
 
     # Print banner
     bless_banner()
@@ -209,16 +210,10 @@ def main():
     print(f'  Profile: {args.profile or "default"}')
     print(f'  Seed:    {args.seed}')
     print(f'  Device:  {device}')
-    print(f'  Compute: {config.get("compute_dtype", "bfloat16")}')
+    print(f'  Compute: {agent_cfg.get("compute_dtype", "bfloat16")}')
     print('=' * 60)
 
-    # import json
-    # print('[Config] Effective config:')
-    # print(json.dumps(config.to_dict(), indent=2, default=str)[:2000])
-    # print('...')
-
-    # Bootstrap + Run
-    components = bootstrap(config, device)
+    components = bootstrap(agent_cfg, env_cfg, device)
     try:
         components['trainer'].run()
     except KeyboardInterrupt:

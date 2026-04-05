@@ -7,7 +7,8 @@ from shared.registry import register
 from shared.base import AgentBase
 from shared.optimizer import LaProp
  
-from .types import DreamerConfig, WorldModelOutputs, ImaginedTrajectory
+from .types import WorldModelOutputs, ImaginedTrajectory
+from .config import DreamerConfig
 from .world_model import DreamerWorldModel
 from .actor_critic import DreamerActorCritic
  

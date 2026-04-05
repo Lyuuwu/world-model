@@ -7,6 +7,10 @@ from shared.base import BaseConfig
 class GlobalConfig(BaseConfig):
     ''' shared config '''
     
+    # --- meta data ---
+    agent: str = ''
+    task: str = ''
+    
     # --- basic ---
     seed: int=0
     device: str='auto'
@@ -20,7 +24,7 @@ class GlobalConfig(BaseConfig):
     min_episode_len: int=2
     
     # --- logging ---
-    log_every: int=50
+    log_every: int=1000
     eval_every: int=10_000
     eval_episodes: int=10
     use_checkpoint: bool=False

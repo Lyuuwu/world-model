@@ -18,7 +18,7 @@ class InterleavedTrainer(TrainerBase):
     '''
  
     def _main_loop(self) -> None:
-        cfg = self.config['agent_config']
+        cfg = self.config
  
         total_steps    = cfg.total_env_steps
         seed_steps     = cfg.get('seed_steps', 1024)

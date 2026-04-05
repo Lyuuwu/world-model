@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from . import tool
+from .base import BaseConfig
 
 def deep_update(base: dict, override: dict) -> dict:
     ''' 遞迴合併 override 到 base '''
@@ -13,6 +14,16 @@ def deep_update(base: dict, override: dict) -> dict:
         else:
             base[k] = v
     return base
+
+def _apply_overrides(cfg, overrides: dict):
+    for k, v in overrides.items():
+        if hasattr(cfg, k):
+            field_val = getattr(cfg, k)
+            if isinstance(field_val, BaseConfig) and isinstance(v, dict):
+                _apply_overrides(field_val, v)
+            else:
+                setattr(cfg, k, v)
+    return cfg
 
 def _parse_value(s: str) -> Any:
     ''' 把 CLI override string 轉成 Python type '''
@@ -80,9 +91,19 @@ def parse_overrides(override_str: str | None) -> dict:
     
 #     return cfg.to_dict()
 
-def _load_config(module, mode):
-    func = getattr(module, mode)
+def _load_config(module_name, mode):
+    try:
+        module = tool.import_module(module_name)
+    except Exception as e:
+        raise ImportError(f'Importing module "{module_name}" gets error: {e}') from e
+    
+    try:
+        func = getattr(module, mode)
+    except AttributeError:
+        raise ValueError(f'module: "{module_name}" does not include: "{mode}"')
+    
     cfg = func()
+    
     return cfg
 
 def _load_yaml(path: Path) -> dict:
@@ -98,7 +119,7 @@ def compose_config(
     override_str: str | None = None,
     project_root: Path | None = None,
     profile: str | None = None
-) -> dict:
+) -> BaseConfig:
     '''
     組合 config
  
@@ -107,33 +128,36 @@ def compose_config(
     if project_root is None:
         # 假設從 scripts/ 執行，project root 是上一層
         project_root = Path(__file__).resolve().parent.parent
- 
-    config = {}
-    
-    # --- agent ---
-    agent_dir = project_root / 'agents' / agent
-    profile_path = agent_dir / 'profiles.py'
-    if not profile_path.exists():
-        raise FileNotFoundError(f'profile file does not exist: {profile_path}')
     
     module_name = f'agents.{agent}.profiles'
-    profile_module = tool.import_module(module_name)
     profile_mode = profile if profile else 'default'
-    agent_cfg = _load_config(profile_module, profile_mode)
-    config['agent_config'] = agent_cfg
- 
+    agent_cfg = _load_config(module_name, profile_mode)
+    
     # --- task domain ---
     domain = task.split('_', 1)[0]  # "atari_pong" -> "atari"
-    deep_update(config, _load_yaml(project_root / 'configs' / f'{domain}.yaml'))
+    from configs.envs import get_env_config
+    env_cfg, domain_overrides = get_env_config(domain)
+    
+    _apply_overrides(agent_cfg, domain_overrides)
  
     # --- CLI overrides ---
-    deep_update(config, parse_overrides(override_str))
+    cli_overrides = parse_overrides(override_str)
+    env_overrides = {}
+    agent_overrides = {}
+    for k, v in cli_overrides.items():
+        if k == 'env' and isinstance(v, dict):
+            env_overrides = v
+        else:
+            agent_overrides[k] = v
+
+    _apply_overrides(agent_cfg, agent_overrides)
+    _apply_overrides(env_cfg, env_overrides)
  
     # --- 注入 meta fields ---
-    config['agent'] = agent
-    config['task'] = task
+    agent_cfg.agent = agent
+    agent_cfg.task = task
  
-    return config
+    return agent_cfg, env_cfg
 
 class Config:
     '''
