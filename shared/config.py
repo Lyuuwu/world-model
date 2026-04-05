@@ -1,5 +1,4 @@
 import copy
-import yaml
 from pathlib import Path
 from typing import Any
 
@@ -105,13 +104,6 @@ def _load_config(module_name, mode):
     cfg = func()
     
     return cfg
-
-def _load_yaml(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    with open(path, encoding='utf-8') as f:
-        data = yaml.safe_load(f)
-    return data or {}
 
 def compose_config(
     agent: str,
