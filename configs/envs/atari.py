@@ -23,7 +23,7 @@ def Atari_override(task: str):
                 'eval_every': 1_000_000
             },
             'atari100k': {
-                'total_env_steps': 1_000_000
+                'total_env_steps': 100_000
             }
         }
     

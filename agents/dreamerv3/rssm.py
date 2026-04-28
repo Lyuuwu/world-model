@@ -58,6 +58,7 @@ class RSSM(nn.Module):
         self.classes = classes
         self.blocks = blocks
         self.unimix = unimix
+        self.action_dim = action_dim
         
         self.feat_dim = h_dim + stoch * classes   # downstream heads 用的維度
         
@@ -76,8 +77,8 @@ class RSSM(nn.Module):
         # --- compile ---
         self.use_compile = use_compile
         if use_compile:
-            self._compiled_observe = torch.compile(self._observe_fused, mode=compile_mode, fullgraph=True)
-            self._compiled_imagine = torch.compile(self._imagine_fused, mode=compile_mode, fullgraph=True)
+            self._compiled_observe = torch.compile(self._observe_fused, mode=compile_mode, fullgraph=False)
+            self._compiled_imagine = torch.compile(self._imagine_fused, mode=compile_mode, fullgraph=False)
     
     def _build_core(self, action_dim, h_dim, hidden, blocks, dyn_layers, norm, act):
         '''
