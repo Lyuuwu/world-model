@@ -301,9 +301,9 @@ class DictObsWrapper(gym.Wrapper):
         dict_obs = {
             self._obs_key: self._to_chw(obs),
             'reward': np.float32(0.0),
-            'is_first': np.bool_(True),
-            'is_last': np.bool_(False),
-            'is_terminal': np.bool_(False)
+            'is_first': True,
+            'is_last': False,
+            'is_terminal': False
         }
         
         self._is_first = False
@@ -318,9 +318,9 @@ class DictObsWrapper(gym.Wrapper):
         dict_obs = {
             self._obs_key: self._to_chw(obs),
             'reward': np.float32(rew),
-            'is_first': np.bool_(self._is_first),
-            'is_last': np.bool_(is_last),
-            'is_terminal': np.bool_(is_term)
+            'is_first': bool(self._is_first),
+            'is_last': bool(is_last),
+            'is_terminal': bool(is_term)
         }
         
         self._is_first = False
