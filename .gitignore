@@ -1,6 +1,7 @@
 .vscode/
 .pytest_cache/
 .codex
+*.pdf
 
 __pycache__/
 world_model.egg-info/

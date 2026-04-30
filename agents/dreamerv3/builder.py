@@ -21,6 +21,8 @@ def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
     decoder = DreamerDecoder(
         obs_space = coder_space,
         h_dim = cfg.wm.h_dim,
+        stoch = cfg.wm.stoch,
+        classes = cfg.wm.classes,
         depth = cfg.wm.depth,
         units = cfg.wm.units,
         layers = cfg.wm.layers,
@@ -32,6 +34,7 @@ def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
         h_dim = cfg.wm.h_dim,
         hidden = cfg.wm.hidden,
         stoch = cfg.wm.stoch,
+        classes = cfg.wm.classes,
         token_dim = encoder.token_dim,
         **cfg.wm.rssm.to_dict()
     )
