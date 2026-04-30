@@ -30,6 +30,8 @@ def _build_atari(game: str, env_config: dict, seed: int | None = None) -> gym.En
     env_id = f'ALE/{ale_name}-v5'
     raw = gym.make(env_id, render_mode=None)
     if seed is not None:
+        raw.action_space.seed(seed)
+        raw.observation_space.seed(seed)
         raw.reset(seed=seed)
     return make_atari(raw, **env_config)
 

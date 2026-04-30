@@ -6,6 +6,7 @@ import torch.nn as nn
 from shared.registry import register
 from shared.networks.mlp import NormedLinear, LinearHead
 from shared.networks.gru import NormedBlockGRUCell
+from shared.networks.mamba2 import Mamba2StepCore
 from shared.distributions import StraightThroughCategorical
 
 @register('rssm', 'dreamerv3')
@@ -27,9 +28,15 @@ class RSSM(nn.Module):
         classes: int=32,           # class
         
         # --- Block GRU ---
-        seq_type: str = 'block_gru',    # tmp: 暫時用不到
+        seq_type: str = 'block_gru',
         blocks: int=8,
         dyn_layers: int=1,
+        mamba_dim: int | None = None,
+        mamba_d_state: int = 128,
+        mamba_d_conv: int = 4,
+        mamba_expand: int = 2,
+        mamba_headdim: int = 64,
+        mamba_ngroups: int = 1,
         
         # --- prior / posterior MLP ---
         prior_layers: int=2,
@@ -59,6 +66,7 @@ class RSSM(nn.Module):
         self.blocks = blocks
         self.unimix = unimix
         self.action_dim = action_dim
+        self.seq_type = seq_type
         
         self.feat_dim = h_dim + stoch * classes   # downstream heads 用的維度
         
@@ -66,7 +74,15 @@ class RSSM(nn.Module):
         # 三條 input branch：deter, stoch, action 各自先投影到 hidden
         # 串起來扔GRU
         self.dynin0, self.dynin1, self.dynin2, \
-        self.cell = self._build_core(action_dim, h_dim, hidden, blocks, dyn_layers, norm, act)
+        self.cell = self._build_core(
+            action_dim, h_dim, hidden, blocks, dyn_layers, norm, act,
+            mamba_dim=mamba_dim,
+            mamba_d_state=mamba_d_state,
+            mamba_d_conv=mamba_d_conv,
+            mamba_expand=mamba_expand,
+            mamba_headdim=mamba_headdim,
+            mamba_ngroups=mamba_ngroups,
+        )
         
         # --- Prior network: h -> logits ---
         self.prior = self._build_prior(h_dim, hidden, stoch, classes, prior_layers, norm, act, outscale)
@@ -80,7 +96,22 @@ class RSSM(nn.Module):
             self._compiled_observe = torch.compile(self._observe_fused, mode=compile_mode, fullgraph=False)
             self._compiled_imagine = torch.compile(self._imagine_fused, mode=compile_mode, fullgraph=False)
     
-    def _build_core(self, action_dim, h_dim, hidden, blocks, dyn_layers, norm, act):
+    def _build_core(
+        self,
+        action_dim,
+        h_dim,
+        hidden,
+        blocks,
+        dyn_layers,
+        norm,
+        act,
+        mamba_dim=None,
+        mamba_d_state=128,
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_headdim=64,
+        mamba_ngroups=1,
+    ):
         '''
         三條 input branch + NormedBlockGRUCell
         '''
@@ -89,14 +120,30 @@ class RSSM(nn.Module):
         dynin1 = NormedLinear(self.stoch * self.classes, hidden, norm, act)
         dynin2 = NormedLinear(action_dim, hidden, norm, act)
         
-        cell = NormedBlockGRUCell(
-            input_dim=hidden * 3,       # 三條 branch concat 後的維度
-            hidden_dim=h_dim,
-            blocks=blocks,
-            hidden_layers=dyn_layers,
-            norm=norm,
-            act=act,
-        )
+        if self.seq_type == 'block_gru':
+            cell = NormedBlockGRUCell(
+                input_dim=hidden * 3,       # 三條 branch concat 後的維度
+                hidden_dim=h_dim,
+                blocks=blocks,
+                hidden_layers=dyn_layers,
+                norm=norm,
+                act=act,
+            )
+        elif self.seq_type == 'mamba2':
+            cell = Mamba2StepCore(
+                input_dim=hidden * 3,
+                output_dim=h_dim,
+                mamba_dim=mamba_dim or hidden,
+                d_state=mamba_d_state,
+                d_conv=mamba_d_conv,
+                expand=mamba_expand,
+                headdim=mamba_headdim,
+                ngroups=mamba_ngroups,
+                norm=norm,
+                act=act,
+            )
+        else:
+            raise ValueError(f'Unknown RSSM seq_type: {self.seq_type}')
         
         return dynin0, dynin1, dynin2, cell
 
@@ -129,14 +176,19 @@ class RSSM(nn.Module):
     
     @property
     def state_keys(self) -> tuple[str, ...]:
+        if self.seq_type == 'mamba2':
+            return ('deter', 'stoch', 'mamba_conv', 'mamba_ssm')
         return ('deter', 'stoch')
     
     def initial_state(self, batch_size: int, device: torch.device = 'cpu') -> dict[str, torch.Tensor]:
         '''回傳全零初始 state dict'''
-        return {
+        state = {
             'deter': torch.zeros(batch_size, self.h_dim, device=device),
             'stoch': torch.zeros(batch_size, self.stoch, self.classes, device=device),
         }
+        if self.seq_type == 'mamba2':
+            state.update(self.cell.initial_cache(batch_size, device))
+        return state
     
     def get_feat(self, state: dict[str, torch.Tensor]) -> torch.Tensor:
         '''
@@ -151,7 +203,9 @@ class RSSM(nn.Module):
               deter: torch.Tensor,     # (B, h_dim)
               stoch: torch.Tensor,     # (B, stoch, classes)
               action: torch.Tensor,    # (B, action_dim)
-              ) -> torch.Tensor:       # (B, h_dim)
+              mamba_conv: torch.Tensor | None = None,
+              mamba_ssm: torch.Tensor | None = None,
+              ):
         '''
         Block GRU deterministic state transition
 
@@ -164,6 +218,10 @@ class RSSM(nn.Module):
         x2 = self.dynin2(action)               # (B, hidden)
         x  = torch.cat([x0, x1, x2], dim=-1)   # (B, 3 * hidden)
         
+        if self.seq_type == 'mamba2':
+            assert mamba_conv is not None and mamba_ssm is not None
+            return self.cell(x, mamba_conv, mamba_ssm)
+
         # Block expansion + hidden layers + gate 全部委託給 cell
         return self.cell(x, deter)
     
@@ -187,17 +245,29 @@ class RSSM(nn.Module):
         x = self.posterior(x)
         return x.reshape(x.shape[:-1] + (self.stoch, self.classes))
     
-    def _observe_fused(self, deter, stoch, action, token):
-        h = self._core(deter, stoch, action)
+    def _observe_fused(self, deter, stoch, action, token, mamba_conv=None, mamba_ssm=None):
+        core_out = self._core(deter, stoch, action, mamba_conv, mamba_ssm)
+        if self.seq_type == 'mamba2':
+            h, mamba_conv, mamba_ssm = core_out
+        else:
+            h = core_out
         x = torch.cat([h, token], dim=-1)
         logit = self.posterior(x)
         logit = logit.reshape(logit.shape[:-1] + (self.stoch, self.classes))
+        if self.seq_type == 'mamba2':
+            return h, logit, mamba_conv, mamba_ssm
         return h, logit
     
-    def _imagine_fused(self, deter, stoch, action):
-        h = self._core(deter, stoch, action)
+    def _imagine_fused(self, deter, stoch, action, mamba_conv=None, mamba_ssm=None):
+        core_out = self._core(deter, stoch, action, mamba_conv, mamba_ssm)
+        if self.seq_type == 'mamba2':
+            h, mamba_conv, mamba_ssm = core_out
+        else:
+            h = core_out
         logit = self.prior(h)
         logit = logit.reshape(logit.shape[:-1] + (self.stoch, self.classes))
+        if self.seq_type == 'mamba2':
+            return h, logit, mamba_conv, mamba_ssm
         return h, logit
     
     def _make_dist(self, logits: torch.Tensor) -> StraightThroughCategorical:
@@ -224,19 +294,33 @@ class RSSM(nn.Module):
             - output: {deter: (B, h_dim), stoch: (B, stoch, classes), logits: (B, stoch, classes)}
         '''
         
-        mask = (~reset).float().unsqueeze(-1)   # (B, 1)
+        mask = (~reset).float()
+
+        def apply_reset(x: torch.Tensor) -> torch.Tensor:
+            view = mask.reshape(mask.shape + (1,) * (x.ndim - 1))
+            return x * view.to(dtype=x.dtype)
         
-        deter = state['deter'] * mask
-        stoch = state['stoch'] * mask.unsqueeze(-1)
-        action = action * mask
+        deter = apply_reset(state['deter'])
+        stoch = apply_reset(state['stoch'])
+        action = action * mask.unsqueeze(-1)
         
-        observe = self._compiled_observe if self.use_compile else self._observe_fused
-        h, logit = observe(deter, stoch, action, tokens)
+        if self.seq_type == 'mamba2':
+            mamba_conv = apply_reset(state['mamba_conv'])
+            mamba_ssm = apply_reset(state['mamba_ssm'])
+            h, logit, mamba_conv, mamba_ssm = self._observe_fused(
+                deter, stoch, action, tokens, mamba_conv, mamba_ssm
+            )
+        else:
+            observe = self._compiled_observe if self.use_compile else self._observe_fused
+            h, logit = observe(deter, stoch, action, tokens)
         
         z = self._make_dist(logit).sample()
         
         next_state = {'deter': h, 'stoch': z}
         output = {'deter': h, 'stoch': z, 'logit': logit}
+        if self.seq_type == 'mamba2':
+            next_state.update({'mamba_conv': mamba_conv, 'mamba_ssm': mamba_ssm})
+            output.update({'mamba_conv': mamba_conv, 'mamba_ssm': mamba_ssm})
         
         return (next_state, output)
 
@@ -289,13 +373,25 @@ class RSSM(nn.Module):
             - feat: {deter: (B, h_dim), stoch: (B, stoch, classes), logit: (B, stoch, classes)}
         '''
         
-        imagine = self._compiled_imagine if self.use_compile else self._imagine_fused
-        h, logit = imagine(state['deter'], state['stoch'], action)
+        if self.seq_type == 'mamba2':
+            h, logit, mamba_conv, mamba_ssm = self._imagine_fused(
+                state['deter'],
+                state['stoch'],
+                action,
+                state['mamba_conv'],
+                state['mamba_ssm'],
+            )
+        else:
+            imagine = self._compiled_imagine if self.use_compile else self._imagine_fused
+            h, logit = imagine(state['deter'], state['stoch'], action)
         
         z = self._make_dist(logit).sample()
         
         next_state = {'deter': h, 'stoch': z}
         feat = {'deter': h, 'stoch': z, 'logit': logit}
+        if self.seq_type == 'mamba2':
+            next_state.update({'mamba_conv': mamba_conv, 'mamba_ssm': mamba_ssm})
+            feat.update({'mamba_conv': mamba_conv, 'mamba_ssm': mamba_ssm})
         
         return (next_state, feat)
     

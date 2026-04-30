@@ -84,11 +84,11 @@ class DreamerWorldModel(nn.Module):
     
     def __init__(
         self,        
-        encoder: nn.Module,
-        decoder: nn.Module,
-        rssm: nn.Module,
-        reward_head: nn.Module,
-        continue_head: nn.Module,
+        encoder: DreamerEncoder,
+        decoder: DreamerDecoder,
+        rssm: RSSM,
+        reward_head: RewardHead,
+        continue_head: ContinueHead,
         
         # --- Loss ---
         free_nats: float=1.0,
@@ -237,19 +237,25 @@ class DreamerWorldModel(nn.Module):
         # --- extraction ---
         start_states, start_feat = self.get_start_states(wm_out.rssm_outputs, K)
         N = start_states['deter'].shape[0]
-        
+
+        if not ac_grads:
+            start_states = {k: v.detach() for k, v in start_states.items()}
+            start_feat = start_feat.detach()
+
         # --- rssm imagine ---
-        img_feats_dict, img_actions = self.rssm.imagine(start_states, policy_fn, horizon)
+        if ac_grads:
+            img_feats_dict, img_actions = self.rssm.imagine(start_states, policy_fn, horizon)
+        else:
+            with torch.no_grad():
+                img_feats_dict, img_actions = self.rssm.imagine(start_states, policy_fn, horizon)
         # img_feats_dict:   {deter: (N, H), stoch: (N, H), logit: (N, H)}
         # img_actions:      (N, H, action_dim)
         
         # --- feature tensor ---
         img_feat = self.rssm.get_feat(img_feats_dict)
-        
+
         if not ac_grads:
-            start_feat = start_feat.detach()
-        
-        img_feat = img_feat.detach()
+            img_feat = img_feat.detach()
         full_feat = torch.cat([start_feat, img_feat], dim=1)    # (N, H+1, feat_dim)
         
         # --- Last action ---
@@ -285,7 +291,7 @@ class DreamerWorldModel(nn.Module):
         K = min(K or T, T)
             
         states = {}
-        for key in ('deter', 'stoch'):
+        for key in self.rssm.state_keys:
             val = rssm_outputs[key][:, -K:]
             states[key] = val.reshape(B*K, *val.shape[2:])
         

@@ -1,5 +1,6 @@
 import sys
 import argparse
+import re
 from pathlib import Path
 from datetime import datetime
 
@@ -98,6 +99,62 @@ def get_trainer_class(trainer_type: str):
         )
     return _TRAINER_MAP[trainer_type]
 
+def _slugify(value, default: str = 'unknown') -> str:
+    text = str(value or default).strip().lower()
+    text = re.sub(r'[^a-z0-9._-]+', '-', text)
+    text = re.sub(r'-+', '-', text).strip('-')
+    return text or default
+
+def _get_nested_config(cfg, path: str, default=None):
+    cur = cfg
+    for part in path.split('.'):
+        if isinstance(cur, dict):
+            cur = cur.get(part, default)
+        else:
+            cur = getattr(cur, part, default)
+        if cur is default:
+            return default
+    return cur
+
+def _sequence_label(seq_type: str) -> str:
+    labels = {
+        'block_gru': 'gru',
+        'mamba2': 'mamba',
+    }
+    return labels.get(seq_type, seq_type)
+
+def _build_run_layout(agent_cfg, agent_name: str, task: str, seed: int, timestamp: str):
+    profile = agent_cfg.get('profile', '') or 'default'
+    seq_type = _get_nested_config(agent_cfg, 'wm.rssm.seq_type', 'unknown')
+    seq_label = _sequence_label(seq_type)
+
+    agent_slug = _slugify(agent_name)
+    task_slug = _slugify(task)
+    seq_slug = _slugify(seq_label)
+    profile_slug = _slugify(profile)
+    seed_slug = f'seed_{seed}'
+    run_name = f'{agent_slug}_{task_slug}_{seq_slug}_{profile_slug}_s{seed}_{timestamp}'
+    run_group = f'{agent_slug}/{task_slug}/{seq_slug}/{profile_slug}'
+    log_dir = (
+        Path(agent_cfg.get('log_dir', 'runs'))
+        / agent_slug
+        / task_slug
+        / seq_slug
+        / profile_slug
+        / seed_slug
+        / timestamp
+    )
+
+    return {
+        'log_dir': log_dir,
+        'run_name': run_name,
+        'run_group': run_group,
+        'plot_label': f'{seq_slug}/{profile_slug}/s{seed}',
+        'profile': profile,
+        'sequence_model': seq_type,
+        'sequence_model_label': seq_label,
+    }
+
 def bootstrap(agent_cfg, env_cfg, device: torch.device) -> dict:
     from shared.trainer_base import seed_everything
     from shared.logger import JSONLLogger
@@ -140,11 +197,22 @@ def bootstrap(agent_cfg, env_cfg, device: torch.device) -> dict:
     )
 
     # 6. Logger
-    time = datetime.now().strftime('%Y-%m-%d_%H%M%S')
-    run_name = f'{agent_name}_{task}_s{seed}_{time}'
-    log_dir = Path(agent_cfg.get('log_dir', 'runs')) / run_name
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+    run_layout = _build_run_layout(agent_cfg, agent_name, task, seed, timestamp)
+    log_dir = run_layout['log_dir']
     logger = JSONLLogger(str(log_dir))
     logger.save_config(agent_cfg.to_dict())
+    logger.save_run_metadata({
+        'agent': agent_name,
+        'task': task,
+        'seed': seed,
+        'device': str(device),
+        'num_envs': num_envs,
+        'num_actions': int(num_actions),
+        'param_count': int(param_count),
+        'timestamp': timestamp,
+        **{k: v for k, v in run_layout.items() if k != 'log_dir'},
+    })
     print(f'[Bootstrap] Logging to {log_dir}')
 
     # 7. Trainer

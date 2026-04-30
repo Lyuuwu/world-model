@@ -10,6 +10,7 @@ class GlobalConfig(BaseConfig):
     # --- meta data ---
     agent: str = ''
     task: str = ''
+    profile: str = ''
     
     # --- basic ---
     seed: int=0
@@ -25,7 +26,7 @@ class GlobalConfig(BaseConfig):
     
     # --- logging ---
     log_every: int=1000
-    eval_every: int=10_000
+    eval_every: int=1000
     eval_episodes: int=10
     use_checkpoint: bool=False
     checkpoint_every: int=25_000

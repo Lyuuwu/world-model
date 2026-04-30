@@ -183,7 +183,7 @@ def lambda_return(
     rets = [boot[:, -1]]
     live = (1 - term.float())[:, 1:] * disc
     cont = (1 - last.float())[:, 1:] * lam
-    interm = rew[:, 1:] + (1 - cont) * live * boot[:, 1:]
+    interm = rew[:, 1:] + (1 - cont) * live * val[:, 1:]
     for t in reversed(range(live.shape[1])):
         rets.append(interm[:, t] + live[:, t] * cont[:, t] * rets[-1])
     
@@ -373,7 +373,7 @@ class DreamerActorCritic(nn.Module):
         metrics = self._build_metrics(
             adv, traj.reward, traj.cont,
             ret, val, tar_normed, weight, slowval,
-            policy_dist, ent, roffset, rscale
+            policy_dist, ent, traj.action[:, :-1], roffset, rscale
         )
         metrics['loss/policy'] = policy_loss.mean().detach()
         metrics['loss/value']  = value_loss.mean().detach()
@@ -437,6 +437,7 @@ class DreamerActorCritic(nn.Module):
             slowval: torch.Tensor,
             policy_dist: Agg,
             entropy: torch.Tensor,
+            action: torch.Tensor,
             roffset: torch.Tensor,
             rscale: torch.Tensor
     ) -> dict[str, torch.Tensor]:
@@ -448,8 +449,10 @@ class DreamerActorCritic(nn.Module):
             'imag/adv_std':   adv.std().detach(),
             'imag/adv_mag':   adv.abs().mean().detach(),
             'imag/rew':       rew.mean().detach(),
+            'imag/rew_std':   rew.std().detach(),
             'imag/con':       con.mean().detach(),
             'imag/ret':       ret_normed.mean().detach(),
+            'imag/ret_std':   ret_normed.std().detach(),
             'imag/val':       val.mean().detach(),
             'imag/tar':       tar_normed.mean().detach(),
             'imag/weight':    weight.mean().detach(),
@@ -465,5 +468,21 @@ class DreamerActorCritic(nn.Module):
             lo = policy_dist.minent
             hi = policy_dist.maxent
             metrics['imag/rand'] = ((entropy.mean() - lo) / (hi - lo)).detach()
+        elif hasattr(policy_dist, 'logits'):
+            logits = policy_dist.logits[:, :-1]
+            probs = torch.softmax(logits, dim=-1)
+            maxent = torch.log(torch.as_tensor(
+                probs.shape[-1], device=probs.device, dtype=probs.dtype
+            ))
+            metrics.update({
+                'imag/rand':            (entropy.mean() / maxent).detach(),
+                'imag/policy_logit_std': logits.std(dim=-1).mean().detach(),
+                'imag/policy_prob_std':  probs.std(dim=-1).mean().detach(),
+                'imag/policy_max_prob':  probs.max(dim=-1).values.mean().detach(),
+            })
+            if action.ndim >= 3 and action.shape[-1] == probs.shape[-1]:
+                action_freq = action.float().mean(dim=tuple(range(action.ndim - 1)))
+                for i, freq in enumerate(action_freq):
+                    metrics[f'imag/action_{i}_frac'] = freq.detach()
             
         return metrics

@@ -108,6 +108,9 @@ class EpisodeReplayBuffer(BufferBase):
         self._episode_lenghts.append(ep_len)
         self._total_steps += ep_len
         self._evict()
+
+    def flush_ongoing(self):
+        self._commit_ongoing()
         
     def sample(
         self,

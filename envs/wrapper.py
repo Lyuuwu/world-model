@@ -360,6 +360,13 @@ class SyncVectorEnvWrapper(gym.Wrapper):
     @property
     def num_envs(self) -> int:
         return self._num_envs
+
+    @property
+    def single_action_space(self):
+        return self._envs[0].action_space
+
+    def sample_actions(self) -> np.ndarray:
+        return np.array([env.action_space.sample() for env in self._envs])
         
     def reset(self) -> tuple[list[Any], list[dict]]:
         obs_list = []

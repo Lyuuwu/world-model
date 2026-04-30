@@ -1,5 +1,7 @@
 .vscode/
 .pytest_cache/
+.codex
+
 __pycache__/
 world_model.egg-info/
 shared.egg-info/

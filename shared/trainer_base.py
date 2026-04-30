@@ -1,5 +1,6 @@
 import os
 import random
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -85,41 +86,39 @@ class TrainerBase(ABC):
         collected = 0
         
         while collected < target:
-            actions = np.array([
-                # self.vec_env.single_action_space.sample()
-                self.eval_env.unwrapped.action_space.sample()
-                for _ in range(self.num_envs)
-            ])
-            
+            actions = self._sample_random_actions()
             next_obs_list, rews, terms, truns, infos = self.vec_env.step(actions)
-            
+
             for i in range(self.num_envs):
                 action_vec = self._action_to_vector(actions[i])
+                self.buffer.add_step(
+                    obs=obs_list[i],
+                    action=action_vec,
+                    reward=float(obs_list[i].get('reward', 0.0)),
+                    is_first=bool(obs_list[i].get('is_first', False)),
+                    is_last=bool(obs_list[i].get('is_last', False)),
+                    is_terminal=bool(obs_list[i].get('is_terminal', False)),
+                )
+
                 done = terms[i] or truns[i]
-                
+
                 if done:
                     final_obs = infos[i].get('final_observation', obs_list[i])
                     self.buffer.add_step(
-                        obs = final_obs,
-                        action = action_vec,
-                        reward = float(rews[i]),
-                        is_first = bool(obs_list[i].get('is_first', False)),
-                        is_last = True,
-                        is_terminal = bool(infos[i].get('real_terminated', terms[i]))
-                    )
-                else:
-                    self.buffer.add_step(
-                        obs = obs_list[i],
-                        action = action_vec,
-                        reward = float(rews[i]),
-                        is_first = bool(obs_list[i].get('is_first', False)),
-                        is_last = False,
-                        is_terminal = False,
+                        obs=final_obs,
+                        action=np.zeros_like(action_vec),
+                        reward=float(final_obs.get('reward', rews[i])),
+                        is_first=bool(final_obs.get('is_first', False)),
+                        is_last=True,
+                        is_terminal=bool(infos[i].get('real_terminated', terms[i])),
                     )
                 
-                collected += 1
+            collected += self.num_envs
             
             obs_list = next_obs_list
+
+        if hasattr(self.buffer, 'flush_ongoing'):
+            self.buffer.flush_ongoing()
         
         print(f'[Prefill] Done. Buffer has {self.buffer.total_steps} steps')
     
@@ -149,26 +148,26 @@ class TrainerBase(ABC):
         
         for i in range(self.num_envs):
             action_vec = action[i].cpu().numpy()
+            self.buffer.add_step(
+                obs=obs_list[i],
+                action=action_vec,
+                reward=float(obs_list[i].get('reward', 0.0)),
+                is_first=bool(obs_list[i].get('is_first', False)),
+                is_last=bool(obs_list[i].get('is_last', False)),
+                is_terminal=bool(obs_list[i].get('is_terminal', False)),
+            )
+            
             done = terms[i] or truns[i]
             
             if done:
                 final_obs = infos[i].get('final_observation', obs_list[i])
                 self.buffer.add_step(
-                    obs = final_obs,
-                    action = action_vec,
-                    reward = float(rews[i]),
-                    is_first = bool(obs_list[i].get('is_first', False)),
-                    is_last = True,
-                    is_terminal = bool(infos[i].get('real_terminated', terms[i]))
-                )
-            else:
-                self.buffer.add_step(
-                    obs = obs_list[i],
-                    action = action_vec,
-                    reward = float(rews[i]),
-                    is_first = bool(obs_list[i].get('is_first', False)),
-                    is_last = False,
-                    is_terminal = False
+                    obs=final_obs,
+                    action=np.zeros_like(action_vec),
+                    reward=float(final_obs.get('reward', rews[i])),
+                    is_first=bool(final_obs.get('is_first', False)),
+                    is_last=True,
+                    is_terminal=bool(infos[i].get('real_terminated', terms[i])),
                 )
             
         self._global_env_step += self.num_envs
@@ -181,6 +180,7 @@ class TrainerBase(ABC):
         self.agent.eval()
         returns = []
         lengths = []
+        t_start = time.time()
  
         for _ in range(n_episodes):
             obs, _ = self.eval_env.reset()
@@ -221,6 +221,8 @@ class TrainerBase(ABC):
             'return_min': float(np.min(returns)),
             'return_max': float(np.max(returns)),
             'length_mean': float(np.mean(lengths)),
+            'eval_episodes': n_episodes,
+            'eval_time_sec': round(time.time() - t_start, 2),
         }
  
     def _final_eval(self) -> None:
@@ -258,6 +260,18 @@ class TrainerBase(ABC):
             vec[int(action_int)] = 1.0
             return vec
         return np.asarray(action_int, dtype=np.float32)
+
+    def _sample_random_actions(self) -> np.ndarray:
+        if hasattr(self.vec_env, 'sample_actions'):
+            return self.vec_env.sample_actions()
+        if hasattr(self.vec_env, 'single_action_space'):
+            return np.array([
+                self.vec_env.single_action_space.sample()
+                for _ in range(self.num_envs)
+            ])
+        if hasattr(self.vec_env, 'action_space'):
+            return self.vec_env.action_space.sample()
+        raise AttributeError('vec_env must expose sample_actions or an action_space')
  
     def _batch_obs(self, obs_list: list[dict]) -> dict[str, torch.Tensor]:
         '''list[dict] > dict[tensor(B, ...)]'''

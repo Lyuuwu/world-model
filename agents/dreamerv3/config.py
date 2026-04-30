@@ -29,10 +29,16 @@ class DecConfig(BaseConfig):
 
 @dataclass
 class RSSMConfig(BaseConfig):
-    # tmp: 之後可能會修改
     seq_type: str = 'block_gru'
     blocks: int = 8
     dyn_layers: int = 1
+
+    mamba_dim: int | None = None
+    mamba_d_state: int = 128
+    mamba_d_conv: int = 4
+    mamba_expand: int = 2
+    mamba_headdim: int = 64
+    mamba_ngroups: int = 1
     
     prior_layers: int = 2
     post_layers: int = 1

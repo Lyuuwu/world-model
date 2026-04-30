@@ -18,8 +18,8 @@ class DreamerAgent(AgentBase):
         self,
         obs_space: dict[str, Any],
         action_dim: int,
-        world_model: nn.Module,
-        actor_critic: nn.Module,
+        world_model: DreamerWorldModel,
+        actor_critic: DreamerActorCritic,
         config: DreamerConfig,
     ):
         super().__init__()
@@ -178,44 +178,45 @@ class DreamerAgent(AgentBase):
         losses.update(wm_losses)
         metrics.update(wm_metrics)
  
-        # --- imagination ---
-        K = min(config.imag_last or T, T)
-        H = config.imag_horizon
- 
-        policy_fn = self.actor_critic.get_policy_fn()
-        traj: ImaginedTrajectory = self.world_model.imagine(
-            wm_out=wm_out,
-            policy_fn=policy_fn,
-            horizon=H,
-            K=K,
-            ac_grads=config.ac_grads,
-        )
- 
-        imag_total, imag_losses, imag_metrics, imag_ret = \
-            self.actor_critic.compute_imag_loss(traj, update_norm=True)
- 
-        for k, v in imag_losses.items():
-            losses[k] = v.mean(dim=1).reshape(B, K)
-        metrics.update(imag_metrics)
- 
-        # --- replay value loss ---
-        if config.repval_loss:
-            feat = wm_out.feat
-            if not config.repval_grad:
-                feat = feat.detach()
- 
-            bootstrap = imag_ret[:, 0].reshape(B, K)
-            repl_losses, repl_metrics = self.actor_critic.compute_repl_loss(
-                replay_feat=feat,
-                is_last=obs['is_last'],
-                is_terminal=obs['is_terminal'],
-                reward=obs['reward'],
-                bootstrap=bootstrap,
+        with torch.autocast(device_type, compute_dtype):
+            # --- imagination ---
+            K = min(config.imag_last or T, T)
+            H = config.imag_horizon
+    
+            policy_fn = self.actor_critic.get_policy_fn()
+            traj: ImaginedTrajectory = self.world_model.imagine(
+                wm_out=wm_out,
+                policy_fn=policy_fn,
+                horizon=H,
                 K=K,
-                update_norms=True,
+                ac_grads=config.ac_grads,
             )
-            losses.update(repl_losses)
-            metrics.update(repl_metrics)
+    
+            imag_total, imag_losses, imag_metrics, imag_ret = \
+                self.actor_critic.compute_imag_loss(traj, update_norm=True)
+    
+            for k, v in imag_losses.items():
+                losses[k] = v.mean(dim=1).reshape(B, K)
+            metrics.update(imag_metrics)
+    
+            # --- replay value loss ---
+            if config.repval_loss:
+                feat = wm_out.feat
+                if not config.repval_grad:
+                    feat = feat.detach()
+    
+                bootstrap = imag_ret[:, 0].reshape(B, K)
+                repl_losses, repl_metrics = self.actor_critic.compute_repl_loss(
+                    replay_feat=feat,
+                    is_last=obs['is_last'],
+                    is_terminal=obs['is_terminal'],
+                    reward=obs['reward'],
+                    bootstrap=bootstrap,
+                    K=K,
+                    update_norms=True,
+                )
+                losses.update(repl_losses)
+                metrics.update(repl_metrics)
  
         # --- aggregate ---
         assert set(losses.keys()) == set(self.scales.keys()), (

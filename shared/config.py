@@ -148,6 +148,8 @@ def compose_config(
     # --- 注入 meta fields ---
     agent_cfg.agent = agent
     agent_cfg.task = task
+    if hasattr(agent_cfg, 'profile'):
+        agent_cfg.profile = profile_mode
  
     return agent_cfg, env_cfg
 
