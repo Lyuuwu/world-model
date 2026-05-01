@@ -221,7 +221,10 @@ class DreamerWorldModel(nn.Module):
         for k, v in losses.items():
             metrics[f'loss/{k}'] = v.mean().detach()
         metrics['reward/pred_mean'] = rew_dist.mean.mean().detach()
+        metrics['reward/target_mean'] = obs['reward'].float().mean().detach()
+        metrics['reward/target_std'] = obs['reward'].float().std().detach()
         metrics['continue/prob_mean'] = con_dist.prob(1.0).mean().detach()
+        metrics['continue/target_mean'] = con_target.mean().detach()
         
         return losses, metrics
     

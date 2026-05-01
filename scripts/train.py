@@ -123,6 +123,18 @@ def _sequence_label(seq_type: str) -> str:
     }
     return labels.get(seq_type, seq_type)
 
+def _module_param_counts(agent) -> dict[str, int]:
+    counts = {'params/agent': sum(p.numel() for p in agent.parameters())}
+    modules = {
+        'params/world_model': getattr(agent, 'world_model', None),
+        'params/rssm': getattr(getattr(agent, 'world_model', None), 'rssm', None),
+        'params/actor_critic': getattr(agent, 'actor_critic', None),
+    }
+    for name, module in modules.items():
+        if module is not None:
+            counts[name] = sum(p.numel() for p in module.parameters())
+    return counts
+
 def _build_run_layout(agent_cfg, agent_name: str, task: str, seed: int, timestamp: str):
     profile = agent_cfg.get('profile', '') or 'default'
     seq_type = _get_nested_config(agent_cfg, 'wm.rssm.seq_type', 'unknown')
@@ -186,7 +198,8 @@ def bootstrap(agent_cfg, env_cfg, device: torch.device) -> dict:
     _import_agent(agent_name)
     agent = build_agent(agent_name, obs_space, num_actions, agent_cfg)
     agent = agent.to(device)
-    param_count = sum(p.numel() for p in agent.parameters())
+    param_counts = _module_param_counts(agent)
+    param_count = param_counts['params/agent']
     print(f'[Bootstrap] Agent: {agent_name}, params={param_count:,}')
 
     # 5. Buffer
@@ -210,6 +223,7 @@ def bootstrap(agent_cfg, env_cfg, device: torch.device) -> dict:
         'num_envs': num_envs,
         'num_actions': int(num_actions),
         'param_count': int(param_count),
+        'param_counts': {k: int(v) for k, v in param_counts.items()},
         'timestamp': timestamp,
         **{k: v for k, v in run_layout.items() if k != 'log_dir'},
     })

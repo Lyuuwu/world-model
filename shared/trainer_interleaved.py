@@ -43,6 +43,8 @@ class InterleavedTrainer(TrainerBase):
         ep_returns: list[float] = []
         ep_return_running = [0.0] * self.num_envs
         grad_steps = 0
+        grad_steps_since_log = 0
+        train_time_acc = 0.0
         t_start = time.time()
  
         tokens_per_grad_step = batch_size * seq_len
@@ -74,13 +76,16 @@ class InterleavedTrainer(TrainerBase):
                 train_credit += train_ratio * self.num_envs
                 while train_credit >= tokens_per_grad_step:
                     batch = self.buffer.sample(batch_size, seq_len)
+                    train_t0 = time.time()
                     metrics = self.agent.train_step(
                         batch,
                         device_type=device_type,
                         compute_dtype=compute_dtype,
                     )
+                    train_time_acc += time.time() - train_t0
                     train_credit -= tokens_per_grad_step
                     grad_steps += 1
+                    grad_steps_since_log += 1
  
                     # accumulate metrics for smoothing
                     for k, v in metrics.items():
@@ -95,19 +100,33 @@ class InterleavedTrainer(TrainerBase):
                     for k, v in train_metrics_acc.items()
                 }
                 elapsed = time.time() - t_start
+                env_steps_per_grad_step = (
+                    step / grad_steps if grad_steps > 0 else 0.0
+                )
                 averaged['fps'] = step / max(elapsed, 1e-6)
+                averaged['train_updates_per_sec'] = (
+                    grad_steps_since_log / max(train_time_acc, 1e-6)
+                )
+                averaged['train_time_sec'] = train_time_acc
                 averaged['buffer_steps'] = self.buffer.total_steps
                 averaged['grad_steps'] = grad_steps
+                averaged['env_steps_per_grad_step'] = env_steps_per_grad_step
  
                 if ep_returns:
                     averaged['ep_return_mean'] = float(
                         np.mean(ep_returns[-20:])
                     )
+                    averaged['ep_return_std'] = float(
+                        np.std(ep_returns[-20:])
+                    )
+                    averaged['episodes'] = len(ep_returns)
  
                 self.logger.log_print(
                     averaged, self._global_env_step, prefix='train'
                 )
                 train_metrics_acc.clear()
+                grad_steps_since_log = 0
+                train_time_acc = 0.0
  
             # --- Phase 4: Eval ---
             if step % eval_every < self.num_envs:

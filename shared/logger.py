@@ -33,6 +33,7 @@ class JSONLLogger:
             'wall_time': wall_time,
         }
         phase_record: dict[str, Any] = dict(record)
+        metrics = {**metrics, **self._system_metrics()}
         
         for k, v in metrics.items():
             tag = f'{prefix}/{k}' if prefix else k
@@ -102,6 +103,16 @@ class JSONLLogger:
     @staticmethod
     def _write_jsonl(file, record: dict[str, Any]) -> None:
         file.write(json.dumps(record, sort_keys=True) + '\n')
+
+    @staticmethod
+    def _system_metrics() -> dict[str, float]:
+        if not torch.cuda.is_available():
+            return {}
+        return {
+            'system/cuda_allocated_gb': torch.cuda.memory_allocated() / 1024**3,
+            'system/cuda_reserved_gb': torch.cuda.memory_reserved() / 1024**3,
+            'system/cuda_max_allocated_gb': torch.cuda.max_memory_allocated() / 1024**3,
+        }
     
 def load_jsonl(path: str | Path) -> list[dict]:
     records = []

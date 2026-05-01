@@ -218,9 +218,14 @@ class TrainerBase(ABC):
         return {
             'return_mean': float(np.mean(returns)),
             'return_std': float(np.std(returns)),
+            'return_sem': float(np.std(returns) / np.sqrt(len(returns))),
+            'return_median': float(np.median(returns)),
             'return_min': float(np.min(returns)),
             'return_max': float(np.max(returns)),
             'length_mean': float(np.mean(lengths)),
+            'length_std': float(np.std(lengths)),
+            'length_min': float(np.min(lengths)),
+            'length_max': float(np.max(lengths)),
             'eval_episodes': n_episodes,
             'eval_time_sec': round(time.time() - t_start, 2),
         }

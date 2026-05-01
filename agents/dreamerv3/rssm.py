@@ -454,13 +454,17 @@ class RSSM(nn.Module):
         prior_dist = self._make_dist(prior_logits)
         
         # KL shape: (B, T, stoch) > .sum(-1) > (B, T)
-        dyn_loss = self._make_dist(posterior_logits.detach()).kl(prior_dist).sum(-1)  
-        rep_loss = post_dist.kl(self._make_dist(prior_logits.detach())).sum(-1)
+        dyn_raw = self._make_dist(posterior_logits.detach()).kl(prior_dist).sum(-1)  
+        rep_raw = post_dist.kl(self._make_dist(prior_logits.detach())).sum(-1)
         
-        dyn_loss = dyn_loss.clamp_min(free_nats)
-        rep_loss = rep_loss.clamp_min(free_nats)
+        dyn_loss = dyn_raw.clamp_min(free_nats)
+        rep_loss = rep_raw.clamp_min(free_nats)
         
         metrics = {
+            'kl/dyn_raw': dyn_raw.mean(),
+            'kl/rep_raw': rep_raw.mean(),
+            'kl/dyn_free_frac': (dyn_raw < free_nats).float().mean(),
+            'kl/rep_free_frac': (rep_raw < free_nats).float().mean(),
             'prior_entropy': prior_dist.entropy().mean(),
             'posterior_entropy': post_dist.entropy().mean()
         }

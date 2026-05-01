@@ -473,19 +473,9 @@ class DreamerActorCritic(nn.Module):
             metrics['imag/rand'] = ((entropy.mean() - lo) / (hi - lo)).detach()
         elif hasattr(policy_dist, 'logits'):
             logits = policy_dist.logits[:, :-1]
-            probs = torch.softmax(logits, dim=-1)
             maxent = torch.log(torch.as_tensor(
-                probs.shape[-1], device=probs.device, dtype=probs.dtype
+                logits.shape[-1], device=logits.device, dtype=logits.dtype
             ))
-            metrics.update({
-                'imag/rand':            (entropy.mean() / maxent).detach(),
-                'imag/policy_logit_std': logits.std(dim=-1).mean().detach(),
-                'imag/policy_prob_std':  probs.std(dim=-1).mean().detach(),
-                'imag/policy_max_prob':  probs.max(dim=-1).values.mean().detach(),
-            })
-            if action.ndim >= 3 and action.shape[-1] == probs.shape[-1]:
-                action_freq = action.float().mean(dim=tuple(range(action.ndim - 1)))
-                for i, freq in enumerate(action_freq):
-                    metrics[f'imag/action_{i}_frac'] = freq.detach()
+            metrics['imag/rand'] = (entropy.mean() / maxent).detach()
             
         return metrics
