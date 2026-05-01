@@ -154,7 +154,10 @@ class EpisodeReplayBuffer(BufferBase):
                 )
             
             batch[key] = tensor
-            
+
+        if 'is_first' in batch:
+            batch['is_first'][:, 0] = True
+
         return batch
     
     def _evict(self):

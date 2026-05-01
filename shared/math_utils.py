@@ -91,7 +91,8 @@ class Normalizer(nn.Module):
             low = torch.quantile(data.float(), self.percentile_low / 100)
             high = torch.quantile(data.float(), self.percentile_high / 100)
             new_offset = torch.zeros(1, device=data.device)
-            new_scale = torch.max(high - low, torch.tensor(self.max_limit))
+            floor = torch.as_tensor(self.max_limit, device=data.device, dtype=high.dtype)
+            new_scale = torch.maximum(high - low, floor)
         else:
             new_offset = data.float().mean()
             new_scale = data.float().std().clamp(min=self.limit)

@@ -3,7 +3,7 @@ from typing import Literal
 import gymnasium as gym
 
 from .wrapper import (
-    StickyActionWrapper, MaxNoopWrapper, FireResetWrapper,
+    StickyActionWrapper, AtariActionSetWrapper, MaxNoopWrapper, FireResetWrapper,
     EpisodicLifeWrapper, MaxAndSkipWrapper, RewardClipWrapper,
     GrayscaleWrapper, ResizeWrapper, FrameStackWrapper,
     TimeLimitWrapper, DictObsWrapper
@@ -13,6 +13,7 @@ def make_atari(
     env: gym.Env,
     *,
     action_repeat: int=4,
+    actions: Literal['needed', 'all']='needed',
     max_noop: int=0,
     sticky_prob: float=0.0,
     fire_reset: bool=False,
@@ -21,10 +22,13 @@ def make_atari(
     reward_scale: float=1.0,
     grayscale: bool=True,
     resize: tuple[int, int]=(64, 64),
+    resize_method: Literal['opencv', 'pillow']='pillow',
     frame_stack: int=1,
     max_episode_steps: int=108000,
     obs_key: str='image'
 ) -> gym.Env:
+    env = AtariActionSetWrapper(env, actions)
+
     if sticky_prob > 0:
         env = StickyActionWrapper(env, sticky_prob)
         
@@ -48,7 +52,7 @@ def make_atari(
     if grayscale:
         env = GrayscaleWrapper(env, keep_dim=True)
         
-    env = ResizeWrapper(env, size=resize)
+    env = ResizeWrapper(env, size=resize, method=resize_method)
     
     if frame_stack > 1:
         env = FrameStackWrapper(env, num_stack=frame_stack)

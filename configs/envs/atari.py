@@ -4,6 +4,7 @@ from shared.base import BaseConfig
 @dataclass
 class AtariEnvConfig(BaseConfig):
     action_repeat: int = 4
+    actions: str = 'needed'
     max_noop: int = 0
     sticky_prob: float = 0.0
     fire_reset: bool = False
@@ -12,6 +13,7 @@ class AtariEnvConfig(BaseConfig):
     reward_scale: float = 1.0
     grayscale: bool = True
     resize: list[int] = field(default_factory=lambda: [64, 64])
+    resize_method: str = 'pillow'
     frame_stack: int = 1
     max_episode_steps: int = 108_000
     obs_key: str = 'image'

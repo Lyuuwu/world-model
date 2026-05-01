@@ -28,7 +28,11 @@ def _build_atari(game: str, env_config: dict, seed: int | None = None) -> gym.En
     # game name -> ALE id
     ale_name = ''.join(w.capitalize() for w in game.split('_'))
     env_id = f'ALE/{ale_name}-v5'
-    raw = gym.make(env_id, render_mode=None)
+    actions = (env_config or {}).get('actions', 'needed')
+    try:
+        raw = gym.make(env_id, render_mode=None, full_action_space=(actions == 'all'))
+    except TypeError:
+        raw = gym.make(env_id, render_mode=None)
     if seed is not None:
         raw.action_space.seed(seed)
         raw.observation_space.seed(seed)
@@ -119,7 +123,7 @@ def get_spaces(task: str, env_config: dict | None = None):
                 dtype=val.dtype,
             )
 
-    num_actions = env.unwrapped.action_space.n
+    num_actions = env.action_space.n
 
     env.close()
     return obs_space, num_actions

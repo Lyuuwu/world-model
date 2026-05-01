@@ -10,6 +10,7 @@ shared.egg-info/
 tests/
 checkpoints/
 runs/
+source_code/
 
 baseline.txt
 file structure.txt

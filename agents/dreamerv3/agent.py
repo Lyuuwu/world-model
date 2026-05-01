@@ -144,6 +144,7 @@ class DreamerAgent(AgentBase):
         # backward
         self.optimizer.zero_grad()
         total_loss.backward()
+        metrics.update(self._grad_metrics())
         self.optimizer.step()
  
         # EMA update
@@ -234,4 +235,50 @@ class DreamerAgent(AgentBase):
  
         metrics['loss/total'] = total.detach().item()
         return total, metrics
+
+    @torch.no_grad()
+    def _grad_metrics(self) -> dict[str, float]:
+        groups: dict[str, nn.Module] = {
+            'world_model': self.world_model,
+            'rssm': self.world_model.rssm,
+            'reward_head': self.world_model.reward_head,
+            'actor_critic': self.actor_critic,
+            'policy_head': self.actor_critic.policy_head,
+            'policy_mlp': self.actor_critic.policy_head.mlp,
+            'value_head': self.actor_critic.value_head,
+        }
+        if hasattr(self.actor_critic.policy_head, 'head'):
+            groups['policy_out'] = self.actor_critic.policy_head.head
+
+        metrics: dict[str, float] = {}
+        for name, module in groups.items():
+            total_params = 0
+            grad_params = 0
+            tensor_count = 0
+            grad_sq = 0.0
+            max_abs = 0.0
+
+            for param in module.parameters():
+                if not param.requires_grad:
+                    continue
+                total_params += param.numel()
+                if param.grad is None:
+                    continue
+                grad = param.grad.detach().float()
+                grad_params += grad.numel()
+                tensor_count += 1
+                grad_sq += grad.square().sum().item()
+                max_abs = max(max_abs, grad.abs().max().item())
+
+            grad_norm = grad_sq ** 0.5
+            grad_rms = (grad_sq / max(grad_params, 1)) ** 0.5
+            metrics[f'grad/{name}/norm'] = grad_norm
+            metrics[f'grad/{name}/rms'] = grad_rms
+            metrics[f'grad/{name}/max'] = max_abs
+            metrics[f'grad/{name}/param_frac'] = (
+                grad_params / total_params if total_params else 0.0
+            )
+            metrics[f'grad/{name}/tensors'] = float(tensor_count)
+
+        return metrics
  

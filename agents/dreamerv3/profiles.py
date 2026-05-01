@@ -23,7 +23,7 @@ def m50m() -> DreamerConfig:
     
 def m100m() -> DreamerConfig:
     return DreamerConfig(
-        wm = WMConfig(h_dim=6144, classes=768, hidden=1024, depth=64, units=768),
+        wm = WMConfig(h_dim=6144, classes=48, hidden=768, depth=48, units=768),
         ac = ACConfig(units=768)
     )
     

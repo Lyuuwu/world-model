@@ -180,10 +180,13 @@ def lambda_return(
     disc: float,
     lam: float=0.95
 ) -> torch.Tensor:
+    assert last.shape == term.shape == rew.shape == val.shape == boot.shape, (
+        last.shape, term.shape, rew.shape, val.shape, boot.shape
+    )
     rets = [boot[:, -1]]
     live = (1 - term.float())[:, 1:] * disc
     cont = (1 - last.float())[:, 1:] * lam
-    interm = rew[:, 1:] + (1 - cont) * live * val[:, 1:]
+    interm = rew[:, 1:] + (1 - cont) * live * boot[:, 1:]
     for t in reversed(range(live.shape[1])):
         rets.append(interm[:, t] + live[:, t] * cont[:, t] * rets[-1])
     

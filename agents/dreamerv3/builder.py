@@ -9,9 +9,12 @@ from .agent import DreamerAgent
 def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
     exclude = ('is_first', 'is_last', 'is_terminal', 'reward')
     coder_space = {k: v for k, v in obs_space.items() if k not in exclude}
+    image_spaces = [v for v in coder_space.values() if v.is_image]
+    img_size = tuple(image_spaces[0].shape[-2:]) if image_spaces else (64, 64)
     
     encoder = DreamerEncoder(
         obs_space = coder_space,
+        img_size = img_size,
         depth = cfg.wm.depth,
         units = cfg.wm.units,
         layers = cfg.wm.layers,
@@ -20,6 +23,7 @@ def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
     
     decoder = DreamerDecoder(
         obs_space = coder_space,
+        img_size = img_size,
         h_dim = cfg.wm.h_dim,
         stoch = cfg.wm.stoch,
         classes = cfg.wm.classes,
@@ -43,7 +47,7 @@ def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
     rewhead = RewardHead(
         feat_dim = feat_dim,
         units = cfg.wm.units,
-        layers = cfg.wm.layers,
+        layers = cfg.wm.head_layers,
         bins = cfg.wm.bins,
         **cfg.wm.rewhead.to_dict()
     )
@@ -51,7 +55,7 @@ def build(obs_space: dict, action_dim: int, cfg: DreamerConfig):
     conthead = ContinueHead(
         feat_dim = feat_dim,
         units = cfg.wm.units,
-        layers = cfg.wm.layers,
+        layers = cfg.wm.head_layers,
         **cfg.wm.conthead.to_dict()
     )
     

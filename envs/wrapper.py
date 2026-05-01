@@ -4,6 +4,7 @@ from typing import Literal, Any
 import gymnasium as gym
 import numpy as np
 import cv2
+from PIL import Image
 
 class StickyActionWrapper(gym.Wrapper):
     def __init__(self, env: gym.Env, sticky_prob: float=0.25):
@@ -24,6 +25,36 @@ class StickyActionWrapper(gym.Wrapper):
         
         self._last_action = action
         return self.env.step(action)
+
+class AtariActionSetWrapper(gym.ActionWrapper):
+    '''Map compact action indices to ALE action ids.'''
+
+    def __init__(self, env: gym.Env, actions: str='needed'):
+        super().__init__(env)
+        assert actions in ('needed', 'all'), actions
+
+        if actions == 'all':
+            action_set = list(range(env.action_space.n))
+        else:
+            ale = getattr(env.unwrapped, 'ale', None)
+            meanings = (
+                env.unwrapped.get_action_meanings()
+                if hasattr(env.unwrapped, 'get_action_meanings') else []
+            )
+            if ale is None or not hasattr(ale, 'getMinimalActionSet'):
+                action_set = list(range(env.action_space.n))
+            elif len(meanings) == len(ale.getMinimalActionSet()):
+                # Gymnasium ALE uses the minimal action set by default; in that
+                # case the env expects compact indices rather than raw ALE ids.
+                action_set = list(range(env.action_space.n))
+            else:
+                action_set = [int(x) for x in ale.getMinimalActionSet()]
+
+        self._action_set = action_set
+        self.action_space = gym.spaces.Discrete(len(action_set))
+
+    def action(self, act: int):
+        return self._action_set[int(act)]
     
 class MaxNoopWrapper(gym.Wrapper):
     '''
@@ -201,9 +232,16 @@ class GrayscaleWrapper(gym.ObservationWrapper):
 class ResizeWrapper(gym.ObservationWrapper):
     ''' 把圖片 resize 到指定大小 '''
 
-    def __init__(self, env: gym.Wrapper, size: tuple[int, int]=(64, 64)):
+    def __init__(
+        self,
+        env: gym.Wrapper,
+        size: tuple[int, int]=(64, 64),
+        method: Literal['opencv', 'pillow']='pillow'
+    ):
         super().__init__(env)
-        self._size = size
+        assert method in ('opencv', 'pillow'), method
+        self._size = tuple(size)
+        self._method = method
 
         old_space = env.observation_space
         assert isinstance(old_space, gym.spaces.Box)
@@ -221,8 +259,13 @@ class ResizeWrapper(gym.ObservationWrapper):
         )
     
     def observation(self, obs: np.ndarray) -> np.ndarray:
-        resized = cv2.resize(obs, self._size[::-1], interpolation=cv2.INTER_AREA)
-        if resized.ndim == 2 and obs.ndim == 3:
+        squeeze_channel = obs.ndim == 3 and obs.shape[-1] == 1
+        source = obs[..., 0] if squeeze_channel else obs
+        if self._method == 'opencv':
+            resized = cv2.resize(source, self._size[::-1], interpolation=cv2.INTER_AREA)
+        else:
+            resized = np.asarray(Image.fromarray(source).resize(self._size[::-1], Image.BILINEAR))
+        if resized.ndim == 2 and (obs.ndim == 3 or squeeze_channel):
             resized = resized[..., np.newaxis]
         return resized.astype(np.uint8)
     
