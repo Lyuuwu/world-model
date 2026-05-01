@@ -54,7 +54,6 @@ class TrainerBase(ABC):
         self._setup()
         self._prefill()
         self._main_loop()
-        self._final_eval()
         self._save_checkpoint(tag='final')
         self.logger.close()
     

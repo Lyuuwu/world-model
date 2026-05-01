@@ -28,7 +28,7 @@ class GlobalConfig(BaseConfig):
     log_every: int=1000
     eval_every: int=1000
     eval_episodes: int=10
-    use_checkpoint: bool=False
+    use_checkpoint: bool=True
     checkpoint_every: int=25_000
     log_dir: str='runs'
     
