@@ -183,7 +183,7 @@ class DreamerAgent(AgentBase):
             # --- imagination ---
             K = min(config.imag_last or T, T)
             H = config.imag_horizon
-    
+
             policy_fn = self.actor_critic.get_policy_fn()
             traj: ImaginedTrajectory = self.world_model.imagine(
                 wm_out=wm_out,
@@ -192,7 +192,8 @@ class DreamerAgent(AgentBase):
                 K=K,
                 ac_grads=config.ac_grads,
             )
-    
+
+        with torch.autocast(device_type, compute_dtype):
             imag_total, imag_losses, imag_metrics, imag_ret = \
                 self.actor_critic.compute_imag_loss(traj, update_norm=True)
     
