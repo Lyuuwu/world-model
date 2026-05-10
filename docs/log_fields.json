@@ -1,0 +1,480 @@
+{
+  "schema_version": 1,
+  "language": "zh-TW",
+  "source": {
+    "train_file": "train.jsonl",
+    "eval_file": "eval.jsonl",
+    "code_references": [
+      "shared/logger.py",
+      "shared/trainer_interleaved.py",
+      "shared/trainer_base.py",
+      "agents/dreamerv3/agent.py",
+      "agents/dreamerv3/world_model.py",
+      "agents/dreamerv3/rssm.py",
+      "agents/dreamerv3/actor_critic.py"
+    ]
+  },
+  "general_notes": [
+    "train.jsonl 記錄訓練過程中的模型 loss、梯度、想像 rollout、效能和最近 episode 統計。",
+    "eval.jsonl 記錄固定評估 episode 中實際環境 return 和 episode length 的統計。",
+    "step 和 env_step 在目前 logger 中代表同一個環境步數，畫圖時通常用 env_step 當 x 軸。",
+    "越高或越低是否比較好要看欄位類型。return 通常越高越好，loss 通常越低越好，std/sem 通常代表波動大小，entropy 代表分布亂度。",
+    "entropy 原始值通常不是 0 到 1。entropy 越高代表分布越平均或策略越隨機，越低代表越集中或越確定。imag/rand 是歸一化亂度，通常越接近 1 越隨機，越接近 0 越集中。"
+  ],
+  "common_fields": {
+    "phase": {
+      "meaning": "此筆 log 的階段，例如 train 或 eval。",
+      "higher_means": "不適用。",
+      "lower_means": "不適用。",
+      "research_use": "用來區分訓練和評估資料。"
+    },
+    "env_step": {
+      "meaning": "累積與環境互動的步數。",
+      "higher_means": "訓練進度較後面。",
+      "lower_means": "訓練進度較前面。",
+      "research_use": "通常當作 x 軸，比較 sample efficiency。"
+    },
+    "step": {
+      "meaning": "logger 記錄的步數；目前等同 env_step。",
+      "higher_means": "訓練進度較後面。",
+      "lower_means": "訓練進度較前面。",
+      "research_use": "可作為 env_step 的備用 x 軸。"
+    },
+    "wall_time": {
+      "meaning": "從 logger 建立後到目前 log 的經過時間，單位是秒。",
+      "higher_means": "實驗已執行較久。",
+      "lower_means": "實驗仍在較早期。",
+      "research_use": "用來比較 wall-clock efficiency。"
+    },
+    "system/cuda_allocated_gb": {
+      "meaning": "目前 PyTorch 已配置使用中的 CUDA 記憶體，單位 GB。",
+      "higher_means": "當下 GPU 記憶體使用量較高。",
+      "lower_means": "當下 GPU 記憶體使用量較低。",
+      "research_use": "比較模型記憶體需求。"
+    },
+    "system/cuda_reserved_gb": {
+      "meaning": "PyTorch CUDA allocator 向 GPU 保留的記憶體，單位 GB。",
+      "higher_means": "allocator 保留較多 GPU 記憶體。",
+      "lower_means": "allocator 保留較少 GPU 記憶體。",
+      "research_use": "觀察 GPU 記憶體壓力。"
+    },
+    "system/cuda_max_allocated_gb": {
+      "meaning": "目前 run 中曾經達到的最大 CUDA allocated memory，單位 GB。",
+      "higher_means": "峰值記憶體需求較高。",
+      "lower_means": "峰值記憶體需求較低。",
+      "research_use": "比較模型峰值 VRAM 成本。"
+    }
+  },
+  "train_fields": {
+    "buffer_steps": {
+      "meaning": "replay buffer 中目前累積的環境 transition 數量。",
+      "higher_means": "buffer 中有更多資料可抽樣。",
+      "lower_means": "可用經驗較少，通常發生在訓練早期。",
+      "research_use": "檢查資料收集進度和 buffer 是否正常成長。"
+    },
+    "continue/prob_mean": {
+      "meaning": "world model 的 continue head 預測下一步非終止的平均機率。",
+      "higher_means": "模型認為 episode 更可能繼續。",
+      "lower_means": "模型認為 episode 更可能結束。",
+      "research_use": "和 continue/target_mean 對照，檢查終止模型是否校準。"
+    },
+    "continue/target_mean": {
+      "meaning": "訓練 batch 中真實非終止 target 的平均值。",
+      "higher_means": "batch 裡終止狀態較少。",
+      "lower_means": "batch 裡終止狀態較多。",
+      "research_use": "提供 continue/prob_mean 的參考基準。"
+    },
+    "env_steps_per_grad_step": {
+      "meaning": "累積環境步數除以累積 gradient update 次數。",
+      "higher_means": "每次更新前收集的環境資料相對較多。",
+      "lower_means": "相對做了更多 gradient update。",
+      "research_use": "檢查訓練和資料收集比例是否符合設定。"
+    },
+    "ep_return_mean": {
+      "meaning": "最近訓練 episode return 的平均值，程式中使用最近 20 個 episode。",
+      "higher_means": "訓練期間收集資料的 policy 表現較好。",
+      "lower_means": "訓練期間表現較差。",
+      "research_use": "觀察 online training performance，但正式比較通常以 eval return 為主。"
+    },
+    "ep_return_std": {
+      "meaning": "最近訓練 episode return 的標準差。",
+      "higher_means": "訓練 episode 表現波動較大。",
+      "lower_means": "訓練 episode 表現較穩定。",
+      "research_use": "輔助判斷訓練穩定性。"
+    },
+    "episodes": {
+      "meaning": "目前訓練過程中完成的 episode 數量。",
+      "higher_means": "已完成更多 episode。",
+      "lower_means": "完成 episode 較少。",
+      "research_use": "檢查環境互動進度。"
+    },
+    "fps": {
+      "meaning": "從訓練開始到目前的平均環境步數每秒。",
+      "higher_means": "整體資料收集與訓練速度較快。",
+      "lower_means": "速度較慢。",
+      "research_use": "比較 wall-clock 訓練效率。"
+    },
+    "grad_steps": {
+      "meaning": "累積 gradient update 次數。",
+      "higher_means": "已做更多訓練更新。",
+      "lower_means": "更新較少。",
+      "research_use": "檢查更新次數是否和 env_step 比例一致。"
+    },
+    "train_time_sec": {
+      "meaning": "上一個 log 區間內花在 agent train_step 的累積時間，單位秒。",
+      "higher_means": "該區間訓練計算成本較高或更新較多。",
+      "lower_means": "該區間訓練計算成本較低。",
+      "research_use": "搭配 train_updates_per_sec 比較訓練吞吐。"
+    },
+    "train_updates_per_sec": {
+      "meaning": "上一個 log 區間內每秒可完成的 gradient update 數量。",
+      "higher_means": "訓練更新吞吐較高。",
+      "lower_means": "訓練更新吞吐較低。",
+      "research_use": "比較 GRU 和 Mamba 訓練速度。"
+    },
+    "grad/actor_critic/norm": {
+      "meaning": "actor_critic 模組梯度的 L2 norm。",
+      "higher_means": "actor-critic 更新訊號較大；過高可能代表不穩定。",
+      "lower_means": "更新訊號較小；過低可能代表學習停滯。",
+      "research_use": "監控 policy/value learning 穩定性。"
+    },
+    "grad/actor_critic/rms": {
+      "meaning": "actor_critic 模組每個參數梯度的 root mean square。",
+      "higher_means": "平均每個參數的梯度較大。",
+      "lower_means": "平均每個參數的梯度較小。",
+      "research_use": "比 norm 更適合跨不同參數量模組粗略比較。"
+    },
+    "grad/actor_critic/max": {
+      "meaning": "actor_critic 模組梯度絕對值最大值。",
+      "higher_means": "存在較大的單點梯度；過高可能是 spike。",
+      "lower_means": "最大梯度較小。",
+      "research_use": "檢查梯度爆炸或偶發不穩定。"
+    },
+    "grad/rssm/norm": {
+      "meaning": "RSSM 模組梯度的 L2 norm。",
+      "higher_means": "latent dynamics 更新訊號較大；過高可能不穩。",
+      "lower_means": "RSSM 更新較小。",
+      "research_use": "比較序列模型部分的訓練穩定性。"
+    },
+    "grad/rssm/rms": {
+      "meaning": "RSSM 模組每個參數梯度的 root mean square。",
+      "higher_means": "平均梯度較大。",
+      "lower_means": "平均梯度較小。",
+      "research_use": "比較 GRU/Mamba RSSM 訓練動態。"
+    },
+    "grad/rssm/max": {
+      "meaning": "RSSM 模組梯度絕對值最大值。",
+      "higher_means": "存在較大的 RSSM 單點梯度。",
+      "lower_means": "最大梯度較小。",
+      "research_use": "檢查 RSSM 是否有梯度 spike。"
+    },
+    "grad/world_model/norm": {
+      "meaning": "world_model 模組梯度的 L2 norm。",
+      "higher_means": "world model 更新訊號較大；過高可能不穩。",
+      "lower_means": "world model 更新較小。",
+      "research_use": "監控表示學習和模型學習穩定性。"
+    },
+    "grad/world_model/rms": {
+      "meaning": "world_model 模組每個參數梯度的 root mean square。",
+      "higher_means": "平均梯度較大。",
+      "lower_means": "平均梯度較小。",
+      "research_use": "比較不同模型大小或架構時比 norm 更穩。"
+    },
+    "grad/world_model/max": {
+      "meaning": "world_model 模組梯度絕對值最大值。",
+      "higher_means": "存在較大的單點梯度。",
+      "lower_means": "最大梯度較小。",
+      "research_use": "檢查 world model 梯度爆炸。"
+    },
+    "imag/adv": {
+      "meaning": "想像 rollout 中 advantage 的平均值。",
+      "higher_means": "policy 在想像軌跡中看到較正向的改善訊號。",
+      "lower_means": "advantage 較小或偏負，policy 改善訊號較弱。",
+      "research_use": "觀察 actor learning signal。"
+    },
+    "imag/adv_std": {
+      "meaning": "想像 rollout advantage 的標準差。",
+      "higher_means": "advantage 波動較大，可能訊號較噪。",
+      "lower_means": "advantage 較集中。",
+      "research_use": "輔助判斷 actor 訓練穩定性。"
+    },
+    "imag/adv_mag": {
+      "meaning": "想像 rollout advantage 絕對值平均。",
+      "higher_means": "actor 更新訊號幅度較大。",
+      "lower_means": "actor 更新訊號幅度較小。",
+      "research_use": "觀察 policy gradient 訊號強度。"
+    },
+    "imag/rew": {
+      "meaning": "world model 在想像 rollout 中預測 reward 的平均值。",
+      "higher_means": "想像軌跡的預期 reward 較高。",
+      "lower_means": "想像軌跡的預期 reward 較低。",
+      "research_use": "比較模型想像中的任務回饋。"
+    },
+    "imag/rew_std": {
+      "meaning": "想像 reward 的標準差。",
+      "higher_means": "想像 reward 波動較大。",
+      "lower_means": "想像 reward 較穩定。",
+      "research_use": "觀察 imagined reward 分布。"
+    },
+    "imag/con": {
+      "meaning": "想像 rollout 中 continue probability 的平均值。",
+      "higher_means": "模型認為想像軌跡較可能持續。",
+      "lower_means": "模型認為想像軌跡較可能終止。",
+      "research_use": "檢查 imagined horizon 的有效性。"
+    },
+    "imag/ret": {
+      "meaning": "正規化後 imagined return 的平均值。",
+      "higher_means": "想像軌跡預期回報較高。",
+      "lower_means": "想像軌跡預期回報較低。",
+      "research_use": "觀察 actor-critic 在 latent imagination 中的表現訊號。"
+    },
+    "imag/ret_std": {
+      "meaning": "正規化 imagined return 的標準差。",
+      "higher_means": "想像 return 波動較大。",
+      "lower_means": "想像 return 較集中。",
+      "research_use": "輔助判斷 imagined return 穩定性。"
+    },
+    "imag/ret_min": {
+      "meaning": "正規化 imagined return 的最小值。",
+      "higher_means": "最差 imagined return 也較高。",
+      "lower_means": "存在較差的 imagined trajectory。",
+      "research_use": "檢查想像軌跡下界。"
+    },
+    "imag/ret_max": {
+      "meaning": "正規化 imagined return 的最大值。",
+      "higher_means": "最佳 imagined trajectory 回報較高。",
+      "lower_means": "最佳 imagined trajectory 回報較低。",
+      "research_use": "檢查想像軌跡上界。"
+    },
+    "imag/ret_rate": {
+      "meaning": "正規化 imagined return 絕對值大於等於 1 的比例。",
+      "higher_means": "更多 imagined return 落在較大幅度區間，可能 scale 較緊或回報變化大。",
+      "lower_means": "imagined return 多數在小幅度區間。",
+      "research_use": "檢查 return normalization 的尺度。"
+    },
+    "imag/val": {
+      "meaning": "critic 對想像 state 的 value 預測平均。",
+      "higher_means": "critic 認為想像 state 價值較高。",
+      "lower_means": "critic 認為想像 state 價值較低。",
+      "research_use": "觀察 value function 在 imagination 中的估計。"
+    },
+    "imag/tar": {
+      "meaning": "正規化後 critic target 的平均值。",
+      "higher_means": "value learning target 較高。",
+      "lower_means": "value learning target 較低。",
+      "research_use": "和 imag/val 對照，檢查 critic 是否跟上 target。"
+    },
+    "imag/weight": {
+      "meaning": "想像 rollout 中用於折扣或 continuation weighting 的平均權重。",
+      "higher_means": "較後面想像步仍保有較高權重。",
+      "lower_means": "想像步權重衰減較快。",
+      "research_use": "理解 actor/value loss 對 imagined horizon 的有效權重。"
+    },
+    "imag/slowval": {
+      "meaning": "slow value network 對想像 state 的 value 平均。",
+      "higher_means": "target/slow critic 認為 state 價值較高。",
+      "lower_means": "target/slow critic 認為 state 價值較低。",
+      "research_use": "和 imag/val 對照，觀察 critic target lag。"
+    },
+    "imag/entropy": {
+      "meaning": "policy 在想像 rollout 中 action distribution 的平均 entropy。",
+      "higher_means": "policy 較隨機、action 分布較平均；探索較多。",
+      "lower_means": "policy 較確定、action 分布較集中。",
+      "research_use": "觀察 exploration 和 policy collapse。"
+    },
+    "imag/rand": {
+      "meaning": "歸一化後的 policy 亂度指標，通常約在 0 到 1。",
+      "higher_means": "越接近 1 代表 action 分布越接近均勻隨機。",
+      "lower_means": "越接近 0 代表 action 分布越集中、policy 越確定。",
+      "research_use": "比原始 entropy 更直觀地比較策略隨機性。"
+    },
+    "imag/rscale": {
+      "meaning": "return normalization 使用的尺度。",
+      "higher_means": "原始 return 尺度或變化較大。",
+      "lower_means": "原始 return 尺度或變化較小。",
+      "research_use": "解讀 imag/ret 和 imag/tar 等正規化值。"
+    },
+    "kl/dyn_raw": {
+      "meaning": "RSSM dynamics KL，使用 posterior.detach() 對 prior 的 KL；衡量 prior dynamics 追 posterior 的誤差。",
+      "higher_means": "prior 和 posterior 差距較大，dynamics 預測較吃力。",
+      "lower_means": "prior 更接近 posterior；過低也可能代表 latent 使用不足。",
+      "research_use": "比較序列模型的 latent dynamics learning。"
+    },
+    "kl/rep_raw": {
+      "meaning": "RSSM representation KL，posterior 對 prior.detach() 的 KL；衡量 posterior representation 的資訊量和約束。",
+      "higher_means": "posterior 相對 prior 帶入更多資訊。",
+      "lower_means": "posterior 和 prior 較接近；過低可能 latent collapse。",
+      "research_use": "觀察 representation learning 和 KL balance。"
+    },
+    "kl/dyn_free_frac": {
+      "meaning": "dyn_raw 低於 free_nats 門檻的比例。",
+      "higher_means": "更多位置的 dynamics KL 被 free-nats 門檻保護。",
+      "lower_means": "更多位置 KL 超過門檻，實際受到 KL 懲罰。",
+      "research_use": "判斷 free_nats 對 dynamics loss 的影響。"
+    },
+    "kl/rep_free_frac": {
+      "meaning": "rep_raw 低於 free_nats 門檻的比例。",
+      "higher_means": "更多位置的 representation KL 被 free-nats 門檻保護。",
+      "lower_means": "更多位置 KL 超過門檻。",
+      "research_use": "判斷 free_nats 對 representation loss 的影響。"
+    },
+    "prior_entropy": {
+      "meaning": "RSSM prior latent distribution 的平均 entropy。",
+      "higher_means": "prior latent 分布較不確定、較平均。",
+      "lower_means": "prior latent 分布較集中、較確定。",
+      "research_use": "觀察 dynamics prior 的不確定性。"
+    },
+    "posterior_entropy": {
+      "meaning": "RSSM posterior latent distribution 的平均 entropy。",
+      "higher_means": "posterior latent 分布較不確定、較平均。",
+      "lower_means": "posterior latent 分布較集中、較確定。",
+      "research_use": "觀察 encoder/posterior 表示的不確定性。"
+    },
+    "loss/con": {
+      "meaning": "continue head 的預測 loss。",
+      "higher_means": "終止/非終止預測較差。",
+      "lower_means": "終止/非終止預測較好。",
+      "research_use": "評估 world model 對 episode termination 的建模。"
+    },
+    "loss/dyn": {
+      "meaning": "套用 free_nats 後的 dynamics KL loss。",
+      "higher_means": "dynamics prior 和 posterior 差距較大。",
+      "lower_means": "dynamics loss 較小。",
+      "research_use": "比較 RSSM dynamics 訓練狀態。"
+    },
+    "loss/image": {
+      "meaning": "影像重建 loss。",
+      "higher_means": "observation reconstruction 較差。",
+      "lower_means": "影像重建較好。",
+      "research_use": "評估 representation 是否能重建觀測。"
+    },
+    "loss/policy": {
+      "meaning": "actor policy loss。",
+      "higher_means": "以目前 loss 定義看，actor objective 較差或更新壓力較大。",
+      "lower_means": "actor loss 較小；不一定單獨代表 policy 表現更好。",
+      "research_use": "需搭配 return、entropy、advantage 一起看。"
+    },
+    "loss/rep": {
+      "meaning": "套用 free_nats 後的 representation KL loss。",
+      "higher_means": "posterior 和 prior 差距較大或 representation 資訊量較高。",
+      "lower_means": "representation KL 較小。",
+      "research_use": "比較 latent representation 訓練狀態。"
+    },
+    "loss/repval": {
+      "meaning": "representation/value 相關的輔助 value loss。",
+      "higher_means": "該輔助 value 預測誤差較大。",
+      "lower_means": "該輔助 value 預測較好。",
+      "research_use": "觀察 representation 與 value learning 的輔助訊號。"
+    },
+    "loss/rew": {
+      "meaning": "reward head 的預測 loss。",
+      "higher_means": "reward 預測較差。",
+      "lower_means": "reward 預測較好。",
+      "research_use": "評估 world model 對 reward 的建模能力。"
+    },
+    "loss/total": {
+      "meaning": "總 loss，由 world model、actor-critic 和相關 loss 加權組合而成。",
+      "higher_means": "整體訓練目標誤差較大；不同設定下不可直接當唯一表現指標。",
+      "lower_means": "整體 loss 較小。",
+      "research_use": "監控訓練是否收斂或發散，正式比較仍以 eval return 為主。"
+    },
+    "loss/value": {
+      "meaning": "critic value loss。",
+      "higher_means": "value 預測和 target 差距較大。",
+      "lower_means": "value 預測較接近 target。",
+      "research_use": "評估 critic learning。"
+    },
+    "reward/pred_mean": {
+      "meaning": "world model reward head 預測 reward 的平均值。",
+      "higher_means": "模型預測 reward 較高。",
+      "lower_means": "模型預測 reward 較低。",
+      "research_use": "和 reward/target_mean 對照檢查 reward model bias。"
+    },
+    "reward/target_mean": {
+      "meaning": "訓練 batch 中真實 reward 的平均值。",
+      "higher_means": "batch 中 reward 較高。",
+      "lower_means": "batch 中 reward 較低。",
+      "research_use": "作為 reward/pred_mean 的比較基準。"
+    },
+    "reward/target_std": {
+      "meaning": "訓練 batch 中真實 reward 的標準差。",
+      "higher_means": "batch reward 波動較大。",
+      "lower_means": "batch reward 較集中。",
+      "research_use": "理解 reward scale 和稀疏程度。"
+    }
+  },
+  "eval_fields": {
+    "eval_episodes": {
+      "meaning": "本次 evaluation 使用的 episode 數量。",
+      "higher_means": "評估樣本數較多，估計通常較穩。",
+      "lower_means": "評估樣本數較少，估計較容易受隨機性影響。",
+      "research_use": "確認不同實驗是否用相同 evaluation budget。"
+    },
+    "eval_time_sec": {
+      "meaning": "完成本次 evaluation 花費的時間，單位秒。",
+      "higher_means": "評估較慢，可能 episode 較長或模型 inference 較慢。",
+      "lower_means": "評估較快。",
+      "research_use": "比較 inference 或 evaluation wall-clock 成本。"
+    },
+    "return_mean": {
+      "meaning": "evaluation episodes 的平均 return。",
+      "higher_means": "任務表現較好，通常是最主要的比較指標。",
+      "lower_means": "任務表現較差。",
+      "research_use": "主要 performance metric，通常跨 seed 畫 mean +/- std。"
+    },
+    "return_std": {
+      "meaning": "evaluation return 的標準差。",
+      "higher_means": "不同 evaluation episode 表現波動較大。",
+      "lower_means": "表現較穩定。",
+      "research_use": "衡量單次 evaluation 內的 variability。"
+    },
+    "return_sem": {
+      "meaning": "evaluation return 的 standard error of the mean，std / sqrt(eval_episodes)。",
+      "higher_means": "平均 return 的估計較不確定。",
+      "lower_means": "平均 return 的估計較穩。",
+      "research_use": "看單次 evaluation mean 的估計誤差。"
+    },
+    "return_median": {
+      "meaning": "evaluation return 的中位數。",
+      "higher_means": "典型 episode 表現較好。",
+      "lower_means": "典型 episode 表現較差。",
+      "research_use": "對 outlier 比 mean 更穩健。"
+    },
+    "return_min": {
+      "meaning": "evaluation episodes 中最低 return。",
+      "higher_means": "最差 episode 表現也較好。",
+      "lower_means": "存在較差 episode。",
+      "research_use": "觀察 worst-case behavior。"
+    },
+    "return_max": {
+      "meaning": "evaluation episodes 中最高 return。",
+      "higher_means": "最佳 episode 表現較好。",
+      "lower_means": "最佳 episode 表現較差。",
+      "research_use": "觀察是否已偶爾學到高分策略。"
+    },
+    "length_mean": {
+      "meaning": "evaluation episodes 的平均長度。",
+      "higher_means": "episode 通常更長；在 survival 型任務可能較好，但不一定等同高 return。",
+      "lower_means": "episode 較短。",
+      "research_use": "搭配 return 判斷 agent 行為和終止情況。"
+    },
+    "length_std": {
+      "meaning": "evaluation episode length 的標準差。",
+      "higher_means": "episode 長度波動較大。",
+      "lower_means": "episode 長度較一致。",
+      "research_use": "觀察策略穩定性和環境終止變化。"
+    },
+    "length_min": {
+      "meaning": "evaluation episodes 中最短長度。",
+      "higher_means": "最短 episode 也較長。",
+      "lower_means": "存在很短的 episode。",
+      "research_use": "檢查 early termination。"
+    },
+    "length_max": {
+      "meaning": "evaluation episodes 中最長長度。",
+      "higher_means": "至少有 episode 能持續較久。",
+      "lower_means": "所有 episode 都較短。",
+      "research_use": "觀察 longest survival 或 timeout 情況。"
+    }
+  }
+}

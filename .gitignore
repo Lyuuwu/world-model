@@ -11,6 +11,7 @@ tests/
 checkpoints/
 runs/
 source_code/
+imgs/
 
 baseline.txt
 file structure.txt
