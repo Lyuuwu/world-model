@@ -395,7 +395,7 @@ def plot_metric(
         return
 
     ax.set_title(f"{task_name} - {phase} - {metric}")
-    ax.set_xlabel("environment steps")
+    ax.set_xlabel("Steps")
     ax.set_ylabel(metric)
     ax.grid(True, alpha=0.25)
     ax.legend(frameon=False)
