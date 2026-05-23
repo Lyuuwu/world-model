@@ -391,7 +391,6 @@ class RSSM(nn.Module):
         feat = {'deter': h, 'stoch': z, 'logit': logit}
         if self.seq_type == 'mamba2':
             next_state.update({'mamba_conv': mamba_conv, 'mamba_ssm': mamba_ssm})
-            feat.update({'mamba_conv': mamba_conv, 'mamba_ssm': mamba_ssm})
         
         return (next_state, feat)
     

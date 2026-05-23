@@ -7,15 +7,9 @@ import torch.nn.functional as F
 from .mlp import NormedLinear, get_norm
 
 try:
-    import mamba_ssm.modules.mamba2 as mamba2_module
-    Mamba2 = mamba2_module.Mamba2
+    from mamba_ssm.modules.mamba2 import Mamba2
 except ImportError:  # pragma: no cover - depends on the training environment.
-    try:
-        import mamba_ssm.modules.mamba2 as mamba2_module
-        Mamba2 = mamba2_module.Mamba2
-    except ImportError:
-        mamba2_module = None
-        Mamba2 = None
+    Mamba2 = None
 
 
 class Mamba2StepCore(nn.Module):
@@ -57,7 +51,6 @@ class Mamba2StepCore(nn.Module):
         if not use_triton_step:
             if ngroups != 1:
                 raise ValueError('Mamba2 torch step fallback requires ngroups=1')
-            mamba2_module.selective_state_update = None
 
         self.in_proj = NormedLinear(input_dim, mamba_dim, norm, act)
         self.mamba = Mamba2(
@@ -165,7 +158,10 @@ class Mamba2StepCore(nn.Module):
         y = torch.einsum('bhpn,bn->bhp', ssm_state.to(dtype), c)
         y = y + mamba.D.to(dtype).reshape(1, mamba.nheads, 1) * x
         y = y.reshape(y.shape[0], -1)
-        y = y * mamba.act(z)
+        if mamba.rmsnorm:
+            y = mamba.norm(y, z)
+        else:
+            y = y * mamba.act(z)
         if d_mlp > 0:
             y = torch.cat([F.silu(z0) * x0, y], dim=-1)
 
