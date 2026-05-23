@@ -36,8 +36,8 @@ def mamba_small() -> DreamerConfig:
             h_dim=2048, classes=16, hidden=256, depth=16, units=256,
             rssm=RSSMConfig(
                 seq_type="mamba2",
-                mamba_dim=256,
-                mamba_d_state=128,
+                mamba_dim=576,
+                mamba_d_state=64,
                 mamba_d_conv=4,
                 mamba_expand=2,
                 mamba_headdim=64,
