@@ -55,6 +55,7 @@ class TrainerBase(ABC):
         self._prefill()
         self._main_loop()
         self._save_checkpoint(tag='final')
+        self._cleanup_nonfinal_checkpoints()
         self.logger.close()
     
     @abstractmethod
@@ -249,6 +250,25 @@ class TrainerBase(ABC):
             'buffer_stats': self.buffer.stats,
         }, path)
         print(f'[Checkpoint] Saved -> {path}')
+
+    def _cleanup_nonfinal_checkpoints(self) -> None:
+        if not self.use_checkpoint:
+            return
+
+        ckpt_dir = self.logger.log_dir / 'checkpoints'
+        final_path = ckpt_dir / 'ckpt_final.pt'
+        if not final_path.exists():
+            return
+
+        removed = []
+        for path in sorted(ckpt_dir.glob('ckpt_*.pt')):
+            if path == final_path:
+                continue
+            path.unlink()
+            removed.append(path.name)
+
+        if removed:
+            print(f'[Checkpoint] Removed non-final checkpoints: {", ".join(removed)}')
  
     def _load_checkpoint(self, path: str | Path) -> None:
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
